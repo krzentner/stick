@@ -1,29 +1,34 @@
+import sys
 import enum
 import json
 import time
 
 
+import stick
 from stick import OutputEngine, declare_output_engine
+from stick.utils import is_instance_str
 
 @declare_output_engine
 class JsonOutputEngine(OutputEngine):
 
-    def __init__(self, filename):
-        self._filename = filename
-        self._file = open(filename, 'a+')
+    def __init__(self, file: stick.utils.FileIsh = None, flatten=False):
+        self.fm = stick.utils.FileManager(file)
+        self.flatten = flatten
 
-    def log(self, prefix, key, value):
-        msg = {
-            'prefix': prefix,
-            'key': key,
-            'value': value,
-            'localtime': time.localtime()
-        }
-        json.dump(msg, fp=self._file, cls=LogEncoder)
-        self._file.write('\n')
+    def log_row(self, row):
+        if self.flatten:
+            msg = row.as_flat_dict()
+        else:
+            msg = row.raw.copy()
+        msg.update({
+            '$table': row.table_name,
+            '$localtime': time.localtime(),
+        })
+        json.dump(msg, fp=self.fm.file, cls=LogEncoder, indent=4)
+        self.fm.file.write('\n')
 
     def close(self):
-        self._file.close()
+        self.fm.close()
 
 
 class LogEncoder(json.JSONEncoder):
@@ -60,10 +65,6 @@ class LogEncoder(json.JSONEncoder):
             dict or str or float or bool: Object encoded in JSON.
 
         """
-        # Why is this method hidden? What does that mean?
-        # pylint: disable=method-hidden
-        # pylint: disable=too-many-branches
-        # pylint: disable=too-many-return-statements
         # This circular reference checking code was copied from the standard
         # library json implementation, but it outputs a repr'd string instead
         # of ValueError on a circular reference.
@@ -94,7 +95,6 @@ class LogEncoder(json.JSONEncoder):
             dict or str or float or bool: Object encoded in JSON.
 
         """
-        # Why is this method hidden? What does that mean?
         # pylint: disable=method-hidden
         # pylint: disable=too-many-branches
         # pylint: disable=too-many-return-statements
@@ -103,7 +103,7 @@ class LogEncoder(json.JSONEncoder):
         # of ValueError on a circular reference.
         try:
             return json.JSONEncoder.default(self, o)
-        except TypeError as err:
+        except TypeError:
             if isinstance(o, dict):
                 data = {}
                 for (k, v) in o.items():
@@ -112,25 +112,26 @@ class LogEncoder(json.JSONEncoder):
                     else:
                         data[repr(k)] = self.default(v)
                 return data
+            elif isinstance(o, type(sys)):
+                return {'$module': o.__name__}
             elif type(o).__module__.split('.')[0] in self.BLOCKED_MODULES:
                 return repr(o)
             elif isinstance(o, type):
                 return {'$typename': o.__module__ + '.' + o.__name__}
-            elif type(o).__module__ == 'numpy' and type(o).__name__.startswith('float'):
+            elif is_instance_str(o, 'numpy.float*'):
                 # For some reason these aren't natively considered
                 # serializable.
-                # JSON doesn't actually have ints, so always use a float.
                 return float(o)
-            elif type(o).__module__ == 'numpy' and 'int' in type(o).__name__:
+            elif is_instance_str(o, 'numpy.*int*'):
                 return int(o)
-            elif type(o).__module__ == 'numpy' and 'bool' in type(o).__name__:
+            elif is_instance_str(o, 'numpy.*bool*'):
                 return bool(o)
             elif isinstance(o, enum.Enum):
                 return {
                     '$enum':
                     o.__module__ + '.' + o.__class__.__name__ + '.' + o.name
                 }
-            elif type(o).__module__ == 'numpy':
+            elif is_instance_str(o, 'numpy.*'):
                 # Probably an array
                 return repr(o)
             elif hasattr(o, '__dict__') or hasattr(o, '__slots__'):
@@ -161,4 +162,4 @@ class LogEncoder(json.JSONEncoder):
                     return repr(o)
                 except TypeError:
                     pass
-                raise err
+                return {"$unknown": None}
