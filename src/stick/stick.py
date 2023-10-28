@@ -12,22 +12,93 @@ from stick.flat_utils import flatten, FlatDict
 
 
 INIT_CALLED = False
-def init(config, wandb_kwargs=None):
+def init(config, wandb_kwargs=None, init_dotenv=True, init_wandb=True, seed_all='if_present'):
     global INIT_CALLED
     if INIT_CALLED:
         warnings.warn(LoggerWarning("stick.init already called in this process"))
         return
     INIT_CALLED = True
-    try:
-        import wandb
-    except ImportError:
-        pass
-    except:
-        if wandb_kwargs is None:
-            wandb_kwargs = {}
-        wandb_kwargs.setdefault('sync_tensorboard', True)
-        wandb_kwargs.setdefault('config', config)
-        wandb.init(**wandb_kwargs)
+    if init_dotenv:
+        try:
+            from dotenv import load_dotenv
+        except ImportError:
+            warnings.warn(LoggerWarning("could not import dotenv"))
+        else:
+            load_dotenv()
+    if init_wandb:
+        try:
+            import wandb
+        except ImportError:
+            warnings.warn(LoggerWarning("could not import wandb"))
+            pass
+        else:
+            if wandb_kwargs is None:
+                wandb_kwargs = {}
+            wandb_kwargs.setdefault('sync_tensorboard', True)
+            wandb_kwargs.setdefault('config', config)
+            wandb.init(**wandb_kwargs)
+
+    if seed_all:
+        assert seed_all is True or seed_all == 'if_present'
+        MISSING = object()
+        seed = MISSING
+        if isinstance(config, dict):
+            try:
+                seed = config['seed']
+            except KeyError:
+                pass
+        else:
+            seed = getattr(config, 'seed', MISSING)
+        if seed is not None and seed is not MISSING:
+            try:
+                seed = int(seed)
+            except ValueError:
+                warnings.warn(f"Could not convert seed {seed!r} to int")
+            else:
+                seed_all_imported_modules(seed)
+        elif seed_all is True:
+            # We were told to seed, and could not
+            raise ValueError("Explicitly asked to seed, "
+                             "but seed is not present in config")
+
+def seed_all_imported_modules(seed: int, make_deterministic: bool=True):
+    import random
+    random.seed(seed)
+
+    if 'numpy' in sys.modules:
+        try:
+            import numpy as np
+        except ImportError:
+            pass
+        else:
+            np.random.seed(seed)
+
+    if 'torch' in sys.modules:
+        try:
+            import torch
+        except ImportError:
+            pass
+        else:
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed(seed)
+            if make_deterministic:
+                torch.backends.cudnn.deterministic = True
+                torch.backends.cudnn.benchmark = False
+
+    if 'tensorflow' in sys.modules:
+        try:
+            import tensorflow as tf
+        except ImportError:
+            pass
+        else:
+            tf.random.set_seed(seed)
+            tf.experimental.numpy.random.seed(seed)
+            tf.set_random_seed(seed)
+            if make_deterministic:
+                os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
+                os.environ['TF_DETERMINISTIC_OPS'] = '1'
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
 
 
 def log(table=None, row=None, step=None):
