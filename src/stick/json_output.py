@@ -8,10 +8,10 @@ import stick
 from stick import OutputEngine, declare_output_engine
 from stick.utils import is_instance_str
 
+
 @declare_output_engine
 class JsonOutputEngine(OutputEngine):
-
-    def __init__(self, file: stick.utils.FileIsh = None, flatten=False):
+    def __init__(self, file: stick.utils.FileIsh = None, flatten: bool = True):
         self.fm = stick.utils.FileManager(file)
         self.flatten = flatten
 
@@ -20,12 +20,14 @@ class JsonOutputEngine(OutputEngine):
             msg = row.as_flat_dict()
         else:
             msg = row.raw.copy()
-        msg.update({
-            '$table': row.table_name,
-            '$localtime': time.localtime(),
-        })
-        json.dump(msg, fp=self.fm.file, cls=LogEncoder, indent=4)
-        self.fm.file.write('\n')
+        msg.update(
+            {
+                "$table": row.table_name,
+                "$localtime": time.localtime(),
+            }
+        )
+        json.dump(msg, fp=self.fm.file, cls=LogEncoder)
+        self.fm.file.write("\n")
 
     def close(self):
         self.fm.close()
@@ -46,10 +48,10 @@ class LogEncoder(json.JSONEncoder):
 
     # Modules whose contents cannot be meaningfully or safelly jsonified.
     BLOCKED_MODULES = {
-        'tensorflow',
-        'ray',
-        'itertools',
-        'weakref',
+        "tensorflow",
+        "ray",
+        "itertools",
+        "weakref",
     }
 
     def default(self, o):
@@ -73,7 +75,7 @@ class LogEncoder(json.JSONEncoder):
         else:
             markerid = id(o)
             if markerid in self._markers:
-                return 'circular ' + repr(o)
+                return "circular " + repr(o)
             else:
                 self._markers[markerid] = o
                 try:
@@ -106,49 +108,45 @@ class LogEncoder(json.JSONEncoder):
         except TypeError:
             if isinstance(o, dict):
                 data = {}
-                for (k, v) in o.items():
+                for k, v in o.items():
                     if isinstance(k, str):
                         data[k] = self.default(v)
                     else:
                         data[repr(k)] = self.default(v)
                 return data
             elif isinstance(o, type(sys)):
-                return {'$module': o.__name__}
-            elif type(o).__module__.split('.')[0] in self.BLOCKED_MODULES:
+                return {"$module": o.__name__}
+            elif type(o).__module__.split(".")[0] in self.BLOCKED_MODULES:
                 return repr(o)
             elif isinstance(o, type):
-                return {'$typename': o.__module__ + '.' + o.__name__}
-            elif is_instance_str(o, 'numpy.float*'):
+                return {"$typename": o.__module__ + "." + o.__name__}
+            elif is_instance_str(o, "numpy.float*"):
                 # For some reason these aren't natively considered
                 # serializable.
                 return float(o)
-            elif is_instance_str(o, 'numpy.*int*'):
+            elif is_instance_str(o, "numpy.*int*"):
                 return int(o)
-            elif is_instance_str(o, 'numpy.*bool*'):
+            elif is_instance_str(o, "numpy.*bool*"):
                 return bool(o)
             elif isinstance(o, enum.Enum):
                 return {
-                    '$enum':
-                    o.__module__ + '.' + o.__class__.__name__ + '.' + o.name
+                    "$enum": o.__module__ + "." + o.__class__.__name__ + "." + o.name
                 }
-            elif is_instance_str(o, 'numpy.*'):
+            elif is_instance_str(o, "numpy.*"):
                 # Probably an array
                 return repr(o)
-            elif hasattr(o, '__dict__') or hasattr(o, '__slots__'):
-                obj_dict = getattr(o, '__dict__', None)
+            elif hasattr(o, "__dict__") or hasattr(o, "__slots__"):
+                obj_dict = getattr(o, "__dict__", None)
                 if obj_dict is not None:
                     data = {k: self.default(v) for (k, v) in obj_dict.items()}
                 else:
-                    data = {
-                        s: self.default(getattr(o, s))
-                        for s in o.__slots__
-                    }
+                    data = {s: self.default(getattr(o, s)) for s in o.__slots__}
                 t = type(o)
-                data['$type'] = t.__module__ + '.' + t.__name__
+                data["$type"] = t.__module__ + "." + t.__name__
                 return data
-            elif callable(o) and hasattr(o, '__name__'):
-                if getattr(o, '__module__', None) is not None:
-                    return {'$function': o.__module__ + '.' + o.__name__}
+            elif callable(o) and hasattr(o, "__name__"):
+                if getattr(o, "__module__", None) is not None:
+                    return {"$function": o.__module__ + "." + o.__name__}
                 else:
                     return repr(o)
             else:

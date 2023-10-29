@@ -8,6 +8,7 @@ import fnmatch
 PathIsh = Union[str, bytes, Path]
 FileIsh = Union[None, PathIsh, TextIOWrapper]
 
+
 def splitall(path: PathIsh) -> list[str]:
     """Split a path into the drive (on windows), the directories, and the file
     in one list."""
@@ -37,18 +38,19 @@ def is_instance_str(obj, type_names):
 
 
 class FileManager:
-
     def __init__(self, file: FileIsh = None):
         self.should_close = False
         if file is None:
             self.file = sys.stdout
         elif isinstance(file, (str, bytes, Path)):
-            if file == 'stderr':
+            if file == "stderr":
                 self.file = sys.stderr
-            elif file == 'stdout':
+            elif file == "stdout":
                 self.file = sys.stdout
             else:
-                self.file = open(file, 'a+')
+                path, _ = os.path.split(file)
+                os.makedirs(path, exist_ok=True)
+                self.file = open(file, "a+")
                 self.should_close = True
         else:
             self.file = file

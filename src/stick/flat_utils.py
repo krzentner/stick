@@ -1,7 +1,7 @@
 """Handles converting raw data to flattened dictionaries for logging."""
 from typing import Any, Union
 
-STICK_PREPROCESSOR = '__stick_preprocessor__'
+STICK_PREPROCESSOR = "__stick_preprocessor__"
 
 SKIP = object()
 
@@ -14,6 +14,7 @@ def declare_processor(type_to_process):
         PROCESSORS[type_to_process] = processor
         setattr(type_to_process, STICK_PREPROCESSOR, processor)
         return processor
+
     return decorator
 
 

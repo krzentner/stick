@@ -6,18 +6,55 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Type, Union, Optional
 import warnings
+import time
 
 import stick
 from stick.flat_utils import flatten, FlatDict
 
-
 INIT_CALLED = False
-def init(config, wandb_kwargs=None, init_dotenv=True, init_wandb=True, seed_all='if_present'):
+
+
+def init(log_dir="runs", run_name=None):
+    if run_name is None:
+        run_name = str(time.time())
+
     global INIT_CALLED
     if INIT_CALLED:
-        warnings.warn(LoggerWarning("stick.init already called in this process"))
+        warnings.warn(LoggerWarning("stick.init() already called in this process"))
         return
     INIT_CALLED = True
+
+    if LOGGER_STACK:
+        warnings.warn(LoggerWarning("stick.log() called before calling stick.init()"))
+    LOGGER_STACK.append(setup_default_logger(log_dir, run_name))
+
+
+INIT_EXTRA_CALLED = False
+
+
+def init_extra(
+    log_dir="runs",
+    run_name=None,
+    config=None,
+    wandb_kwargs=None,
+    init_dotenv=True,
+    init_wandb=True,
+    seed_all="if_present",
+):
+    init(log_dir, run_name)
+    global INIT_EXTRA_CALLED
+    if INIT_EXTRA_CALLED:
+        return
+    INIT_EXTRA_CALLED = True
+
+    if config is None:
+        config = {}
+
+    if isinstance(config, dict):
+        config_as_dict = config
+    else:
+        config_as_dict = config.__dict__
+
     if init_dotenv:
         try:
             from dotenv import load_dotenv
@@ -34,21 +71,18 @@ def init(config, wandb_kwargs=None, init_dotenv=True, init_wandb=True, seed_all=
         else:
             if wandb_kwargs is None:
                 wandb_kwargs = {}
-            wandb_kwargs.setdefault('sync_tensorboard', True)
-            wandb_kwargs.setdefault('config', config)
+            wandb_kwargs.setdefault("sync_tensorboard", True)
+            wandb_kwargs.setdefault("config", config)
             wandb.init(**wandb_kwargs)
 
     if seed_all:
-        assert seed_all is True or seed_all == 'if_present'
+        assert seed_all is True or seed_all == "if_present"
         MISSING = object()
         seed = MISSING
-        if isinstance(config, dict):
-            try:
-                seed = config['seed']
-            except KeyError:
-                pass
-        else:
-            seed = getattr(config, 'seed', MISSING)
+        try:
+            seed = config_as_dict["seed"]
+        except KeyError:
+            pass
         if seed is not None and seed is not MISSING:
             try:
                 seed = int(seed)
@@ -58,14 +92,18 @@ def init(config, wandb_kwargs=None, init_dotenv=True, init_wandb=True, seed_all=
                 seed_all_imported_modules(seed)
         elif seed_all is True:
             # We were told to seed, and could not
-            raise ValueError("Explicitly asked to seed, "
-                             "but seed is not present in config")
+            raise ValueError(
+                "Explicitly asked to seed, " "but seed is not present in config"
+            )
+    log(table="hparams", row=config_as_dict)
 
-def seed_all_imported_modules(seed: int, make_deterministic: bool=True):
+
+def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
     import random
+
     random.seed(seed)
 
-    if 'numpy' in sys.modules:
+    if "numpy" in sys.modules:
         try:
             import numpy as np
         except ImportError:
@@ -73,7 +111,7 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool=True):
         else:
             np.random.seed(seed)
 
-    if 'torch' in sys.modules:
+    if "torch" in sys.modules:
         try:
             import torch
         except ImportError:
@@ -85,7 +123,7 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool=True):
                 torch.backends.cudnn.deterministic = True
                 torch.backends.cudnn.benchmark = False
 
-    if 'tensorflow' in sys.modules:
+    if "tensorflow" in sys.modules:
         try:
             import tensorflow as tf
         except ImportError:
@@ -95,8 +133,8 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool=True):
             tf.experimental.numpy.random.seed(seed)
             tf.set_random_seed(seed)
             if make_deterministic:
-                os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
-                os.environ['TF_DETERMINISTIC_OPS'] = '1'
+                os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+                os.environ["TF_DETERMINISTIC_OPS"] = "1"
 
     os.environ["PYTHONHASHSEED"] = str(seed)
 
@@ -136,7 +174,7 @@ def get_logger():
     if "torch" in sys.modules:
         import stick.torch
     if not LOGGER_STACK:
-        LOGGER_STACK.append(setup_default_logger())
+        init()
     return LOGGER_STACK[-1]
 
 
@@ -161,7 +199,9 @@ class Row:
 
 
 class Logger:
-    def __init__(self):
+    def __init__(self, log_dir, run_name):
+        self.log_dir = log_dir
+        self.run_name = run_name
         self.fileloc_to_tables: dict[tuple[str, int], str] = {}
         self.tables_to_fileloc: dict[str, tuple[str, int]] = {}
         self.table_to_default_step: defaultdict[str, int] = defaultdict(int)
@@ -221,7 +261,6 @@ class Logger:
 
 
 class OutputEngine:
-
     def log_row(self, row: Row):
         pass
 
@@ -240,34 +279,34 @@ def declare_output_engine(output_engine_type):
     return output_engine_type
 
 
-def setup_default_logger(directory="."):
-    if not INIT_CALLED:
-        init({})
+def setup_default_logger(log_dir, run_name):
+    assert INIT_CALLED, "Call init() instead"
+
     from stick.json_output import JsonOutputEngine
     from stick.pprint_output import PPrintOutputEngine
     from stick.tb_output import TensorBoardOutput
 
-    logger = Logger()
-    logger.add_output(JsonOutputEngine(f"{directory}/stick.ndjson"))
+    logger = Logger(log_dir=log_dir, run_name=run_name)
+    logger.add_output(JsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
     try:
-        logger.add_output(TensorBoardOutput(directory))
+        logger.add_output(TensorBoardOutput(log_dir, run_name))
     except ImportError:
         warnings.warn(LoggerWarning("tensorboard API not installed"))
     if "dowel" in sys.modules:
         from stick_dowel import global_dowel_output
 
         logger.add_output(global_dowel_output())
-    logger.add_output(PPrintOutputEngine(f"{directory}/stick.log"))
+    logger.add_output(PPrintOutputEngine(f"{log_dir}/{run_name}/stick.log"))
     return logger
 
 
-def test_log_pprint():
+def test_log_pprint(tmp_path):
     from stick.pprint_output import PPrintOutputEngine
     import io
 
     hi = "HI ^_^"
     f = io.StringIO()
-    with Logger() as logger:
+    with Logger(log_dir=tmp_path, run_name="test_log_pprint") as logger:
         logger.add_output(PPrintOutputEngine(f))
         log()
         content1 = f.getvalue()
@@ -280,13 +319,13 @@ def test_log_pprint():
         print(content2)
 
 
-def test_log_json():
+def test_log_json(tmp_path):
     from stick.json_output import JsonOutputEngine
     import io
 
     hi = "HI ^_^"
     f = io.StringIO()
-    with Logger() as logger:
+    with Logger(log_dir=tmp_path, run_name="test_log_json") as logger:
         logger.add_output(JsonOutputEngine(f))
         log()
         content1 = f.getvalue()
