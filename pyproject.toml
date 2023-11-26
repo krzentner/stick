@@ -46,7 +46,7 @@ build-backend = "setuptools.build_meta"
 
 # Below is poetry setup for developing this package
 [tool.poetry.dependencies]
-python = "^3.7,<3.12"
+python = "^3.7,<4.0"
 
 [tool.pyright]
 include = ["src"]
