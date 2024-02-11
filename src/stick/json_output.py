@@ -2,11 +2,15 @@ import sys
 import enum
 import json
 import time
+from typing import Optional
+
+from torch import Value
 
 
 import stick
 from stick import OutputEngine, declare_output_engine
 from stick.utils import is_instance_str
+from stick.flat_utils import ScalarTypes
 
 
 @declare_output_engine
@@ -161,3 +165,29 @@ class LogEncoder(json.JSONEncoder):
                 except TypeError:
                     pass
                 return {"$unknown": None}
+
+
+def load_ndjson_log_file(
+    filename: str, keys: Optional[list[str]]
+) -> dict[str, list[ScalarTypes]]:
+    rows = []
+    all_keys = keys
+    with open(filename) as f:
+        for i, line in enumerate(f.readlines()):
+            try:
+                row = json.loads(line)
+            except ValueError as e:
+                import warnings
+
+                warnings.warn(f"Could not load line {i} of file {filename}")
+            else:
+                if all_keys is None:
+                    all_keys = list(row.keys())
+                if keys is not None:
+                    row = {row[k] for k in keys}
+                rows.append(row)
+    if len(rows) == 0:
+        raise ValueError(f"Could not load any rows from {filename}")
+    else:
+        assert all_keys is not None
+        return {k: [r[k] for r in rows] for k in all_keys}

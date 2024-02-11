@@ -1,4 +1,5 @@
-from stick import OutputEngine, declare_output_engine
+from warnings import warn
+from stick import OutputEngine, declare_output_engine, LoggerWarning
 
 SummaryWriter = None
 
@@ -9,8 +10,10 @@ class TensorBoardOutput(OutputEngine):
         global SummaryWriter
         try:
             if SummaryWriter is None:
+                # Apparently this is necessary?
+                import caffe2
                 from torch.utils.tensorboard import SummaryWriter
-        except ImportError:
+        except (ImportError, ModuleNotFoundError):
             pass
         try:
             if SummaryWriter is None:
@@ -37,9 +40,17 @@ class TensorBoardOutput(OutputEngine):
                 k: v for (k, v) in flat_dict.items() if not k.startswith("hparam")
             }
             metrics = {k: v for (k, v) in flat_dict.items() if k.startswith("hparam")}
-            self.writer.add_hparams(hparams, metrics, run_name=self.run_name)
+            # Handle tensorboardX API difference
+            try:
+                self.writer.add_hparams(hparams, metrics, run_name=self.run_name)
+            except TypeError:
+                self.writer.add_hparams(hparams, metrics, name=self.run_name)
         for k, v in row.as_flat_dict().items():
-            self.writer.add_scalar(k, v, row.step)
+            if v is not None and not isinstance(v, str):
+                try:
+                    self.writer.add_scalar(k, v, row.step)
+                except (TypeError, NotImplementedError) as ex:
+                    warn(LoggerWarning(f"Could not log key {k} in TensorBoard: {ex}"))
         self.writer.flush()
 
     def close(self):

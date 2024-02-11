@@ -3,13 +3,13 @@ import sys
 import inspect
 from pprint import pprint
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Type, Union, Optional
 import warnings
 import time
 
 import stick
-from stick.flat_utils import flatten, FlatDict
+from stick.flat_utils import flatten, FlatDict, ScalarTypes
 
 INIT_CALLED = False
 
@@ -141,30 +141,62 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
 
 def log(table=None, row=None, step=None):
     logger = get_logger()
-    # Support calls that pass in just a row
-    if isinstance(table, Row):
-        assert row is None
+
+    # Most of this function is magic to figure out how to produce a Row object
+    # based on minimal arguments.
+
+    # Special case only a row-like passed in as the first argument
+    # e.g. log({'x': x}) or log(Row('grad_step', {'x': x}))
+    if isinstance(table, (dict, Row)) and row is None and step is None:
         row = table
-        table = row.table_name
-    # If we're missing either of these, we'll need to get them using inspect
-    if table is None or row is None:
+        table = None
+
+    # Check all the types
+    if table is not None:
+        assert isinstance(table, str)
+    if row is not None and not isinstance(row, (dict, Row)):
+        raise ValueError(
+            f"Unsupported row type {type(row)}. "
+            "Use a dictionary or inherit from stick.Row."
+        )
+    if step is not None:
+        assert isinstance(step, int)
+
+    # Check what we have
+    if isinstance(row, Row):
+        # We have a row, so we won't need to guess any info
+        # Arguments might still override parts of the Row object
+        # e.g. log(Row('grad_step', {'x': x}), table='grad_step2')
+        # e.g. log(Row('grad_step', {'x': x}), step=0)
+        if table is None and step is None:
+            # Case 1: We have a row, just log it
+            logger.log_row(row=row)
+        elif isinstance(table, str) and step is None:
+            # Case 2: User provided the table and not a step, recompute the step
+            step = logger.get_default_step(table)
+            logger.log_row(replace(row, table_name=table, step=step))
+        elif isinstance(table, str) and isinstance(step, int):
+            # Case 3: User provided the table and step
+            logger.log_row(replace(row, table_name=table, step=step))
+    elif isinstance(table, str) and isinstance(row, dict):
+        # No inspecting required, just need to figure out the step
+        # e.g. log('grad_step', {'x': x})
+        if step is None:
+            step = logger.get_default_step(table)
+        logger.log_row(Row(raw=row, table_name=table, step=step))
+    else:
+        assert table is None
+        # We do not have a Row, row is either a dict or None
+        # We need to figure out our table name using inspect
+        # e.g. log({'x': x}) or log()
         stack = inspect.stack()
         frame_info = stack[1]
-        # We need a prefix:
-        if table is None:
-            table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
+        table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
         if step is None:
             step = logger.get_default_step(table)
         if row is None:
-            row = Row(raw=frame_info.frame.f_locals, table_name=table, step=step)
-        elif isinstance(row, dict):
-            row = Row(raw=row, table_name=table, step=step)
-        elif not isinstance(row, Row):
-            raise ValueError(
-                f"Unsupported row type {type(row)}. "
-                "Use a dictionary or inherit from stick.Row."
-            )
-    logger.log_row(row=row)
+            row = frame_info.frame.f_locals
+        logger.log_row(Row(raw=row, table_name=table, step=step))
 
 
 LOGGER_STACK = []
@@ -188,8 +220,8 @@ class LoggerError(ValueError):
 
 @dataclass
 class Row:
-    raw: Any
     table_name: str
+    raw: Any
     step: int
 
     def as_flat_dict(self, prefix="") -> FlatDict:
@@ -269,6 +301,7 @@ class OutputEngine:
 
 
 OUTPUT_ENGINES = {}
+LOAD_FILETYPES = {}
 
 
 def declare_output_engine(output_engine_type):
@@ -298,6 +331,20 @@ def setup_default_logger(log_dir, run_name):
         logger.add_output(global_dowel_output())
     logger.add_output(PPrintOutputEngine(f"{log_dir}/{run_name}/stick.log"))
     return logger
+
+
+def load_log_file(
+    filename: str, keys: Optional[list[str]]
+) -> dict[str, list[ScalarTypes]]:
+    _, ext = os.path.splitext(filename)
+    if ext in LOAD_FILETYPES:
+        return LOAD_FILETYPES[ext](filename, keys)
+    else:
+        raise ValueError(
+            f"Unknown filetype {ext}. Perhaps you need to load "
+            "a stick backend or use one of the well known log "
+            "types (.ndjson)"
+        )
 
 
 def test_log_pprint(tmp_path):
