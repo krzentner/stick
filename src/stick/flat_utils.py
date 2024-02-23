@@ -7,6 +7,8 @@ SKIP = object()
 
 PROCESSORS = {}
 
+MAX_SEQ_LEN = 8
+
 
 def declare_processor(type_to_process):
     def decorator(processor):
@@ -25,6 +27,8 @@ FlatDict = dict[str, Union[None, str, float, int, bool]]
 
 def flatten(src: Any, prefix: str, dst: FlatDict):
     """Lossfully flatten a dictionary."""
+    if prefix == '_':
+        return
     if isinstance(src, ScalarTypes):
         key = prefix
         i = 1
@@ -32,7 +36,7 @@ def flatten(src: Any, prefix: str, dst: FlatDict):
             key = f"{prefix}_{i}"
             i += 1
         dst[key] = src
-    elif isinstance(src, dict):
+    elif isinstance(src, dict) and (len(src) <= MAX_SEQ_LEN or not prefix):
         for k, v in src.items():
             try:
                 if prefix:
@@ -43,7 +47,7 @@ def flatten(src: Any, prefix: str, dst: FlatDict):
                 pass
             else:
                 flatten(v, flat_k, dst)
-    elif isinstance(src, (tuple, list)):
+    elif isinstance(src, (list, tuple)) and len(src) <= MAX_SEQ_LEN:
         for i, v in enumerate(src):
             flat_k = f"{prefix}[{i}]"
             flatten(v, prefix, dst)

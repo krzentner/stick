@@ -185,13 +185,14 @@ def log(table=None, row=None, step=None):
             step = logger.get_default_step(table)
         logger.log_row(Row(raw=row, table_name=table, step=step))
     else:
-        assert table is None
         # We do not have a Row, row is either a dict or None
-        # We need to figure out our table name using inspect
-        # e.g. log({'x': x}) or log()
+        # We need to figure out either our table name or row contents using
+        # inspect.
+        # e.g. log({'x': x}) or log() or log(table='x')
         stack = inspect.stack()
         frame_info = stack[1]
-        table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
+        if table is None:
+            table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
         if step is None:
             step = logger.get_default_step(table)
         if row is None:
@@ -208,6 +209,10 @@ def get_logger():
     if not LOGGER_STACK:
         init()
     return LOGGER_STACK[-1]
+
+
+def add_output(output_engine):
+    get_logger().add_output(output_engine)
 
 
 class LoggerWarning(UserWarning):
