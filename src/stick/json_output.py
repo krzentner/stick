@@ -4,22 +4,20 @@ import json
 import time
 from typing import Optional
 
-from torch import Value
-
 
 import stick
-from stick import OutputEngine, declare_output_engine
 from stick.utils import is_instance_str
 from stick.flat_utils import ScalarTypes
 
 
-@declare_output_engine
-class JsonOutputEngine(OutputEngine):
-    def __init__(self, file: stick.utils.FileIsh = None, flatten: bool = True):
+@stick.declare_output_engine
+class JsonOutputEngine(stick.OutputEngine):
+    def __init__(self, file: stick.utils.FileIsh = None, flatten: bool = True, log_level=stick.TRACE):
+        super().__init__(log_level=log_level)
         self.fm = stick.utils.FileManager(file)
         self.flatten = flatten
 
-    def log_row(self, row):
+    def log_row_inner(self, row):
         if self.flatten:
             msg = row.as_flat_dict()
         else:
@@ -28,6 +26,8 @@ class JsonOutputEngine(OutputEngine):
             {
                 "$table": row.table_name,
                 "$localtime": time.localtime(),
+                "$step": row.step,
+                "$level": row.log_level,
             }
         )
         json.dump(msg, fp=self.fm.file, cls=LogEncoder)
@@ -170,8 +170,11 @@ class LogEncoder(json.JSONEncoder):
 def load_ndjson_log_file(
     filename: str, keys: Optional[list[str]]
 ) -> dict[str, list[ScalarTypes]]:
-    rows = []
-    all_keys = keys
+    data = {}
+    if keys is None:
+        key_set = None
+    else:
+        key_set = set(keys)
     with open(filename) as f:
         for i, line in enumerate(f.readlines()):
             try:
@@ -181,13 +184,29 @@ def load_ndjson_log_file(
 
                 warnings.warn(f"Could not load line {i} of file {filename}")
             else:
-                if all_keys is None:
-                    all_keys = list(row.keys())
-                if keys is not None:
-                    row = {row[k] for k in keys}
-                rows.append(row)
-    if len(rows) == 0:
+                table = row['$table']
+                try:
+                    step = row['$step']
+                except KeyError:
+                    import warnings
+                    warnings.warn(f"No step for table {table!r}")
+                else:
+                    step_key = f"$step.{table}"
+                    if step_key in data:
+                        data[step_key].append(step)
+                    else:
+                        data[step_key] = [step]
+                for k, v in row.items():
+                    if not k.startswith('$'):
+                        full_key = f"{table}.{k}"
+                        if key_set is None or full_key in key_set:
+                            if full_key in data:
+                                data[full_key].append(v)
+                            else:
+                                data[full_key] = [v]
+    if len(data) == 0:
         raise ValueError(f"Could not load any rows from {filename}")
     else:
-        assert all_keys is not None
-        return {k: [r[k] for r in rows] for k in all_keys}
+        return data
+
+stick.LOAD_FILETYPES['.ndjson'] = load_ndjson_log_file

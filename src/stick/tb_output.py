@@ -1,12 +1,19 @@
 from warnings import warn
-from stick import OutputEngine, declare_output_engine, LoggerWarning
+from stick import OutputEngine, declare_output_engine, LoggerWarning, INFO
 
 SummaryWriter = None
+
+DEFAULT_LOG_LEVEL = INFO
 
 
 @declare_output_engine
 class TensorBoardOutput(OutputEngine):
-    def __init__(self, log_dir, run_name, flush_secs=120, histogram_samples=1e2):
+    def __init__(self, log_dir, run_name, flush_secs=120, log_level=None):
+        # Allow default to be overridden
+        # TODO: Find a better API for this.
+        if log_level is None:
+            log_level = DEFAULT_LOG_LEVEL
+        super().__init__(log_level=log_level)
         global SummaryWriter
         try:
             if SummaryWriter is None:
@@ -29,11 +36,12 @@ class TensorBoardOutput(OutputEngine):
         if SummaryWriter is None:
             raise ImportError("Could not find tensorboard API")
 
-        self.writer = SummaryWriter(log_dir, flush_secs=flush_secs)
-        self._histogram_samples = int(histogram_samples)
+        self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
         self.run_name = run_name
+        print(f"Created TensorBoardOutput with log level: "
+              f"{self.log_level} in directory {log_dir}/{run_name}")
 
-    def log_row(self, row):
+    def log_row_inner(self, row):
         if row.table_name == "hparams":
             flat_dict = row.as_flat_dict()
             hparams = {
@@ -45,12 +53,13 @@ class TensorBoardOutput(OutputEngine):
                 self.writer.add_hparams(hparams, metrics, run_name=self.run_name)
             except TypeError:
                 self.writer.add_hparams(hparams, metrics, name=self.run_name)
-        for k, v in row.as_flat_dict().items():
-            if v is not None and not isinstance(v, str):
-                try:
-                    self.writer.add_scalar(k, v, row.step)
-                except (TypeError, NotImplementedError) as ex:
-                    warn(LoggerWarning(f"Could not log key {k} in TensorBoard: {ex}"))
+        else:
+            for k, v in row.as_flat_dict().items():
+                if v is not None and not isinstance(v, str):
+                    try:
+                        self.writer.add_scalar(f"{row.table_name}/{k}", v, row.step)
+                    except (TypeError, NotImplementedError) as ex:
+                        warn(LoggerWarning(f"Could not log key {k} in TensorBoard: {ex}"))
         self.writer.flush()
 
     def close(self):

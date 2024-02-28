@@ -7,11 +7,57 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Type, Union, Optional
 import warnings
 import time
+import functools
 
 import stick
 from stick.flat_utils import flatten, FlatDict, ScalarTypes
 
 INIT_CALLED = False
+
+# Log levels
+
+LOG_LEVELS = {}
+
+@dataclass(eq=False, order=False, frozen=True)
+@functools.total_ordering
+class LogLevel:
+    name: str
+    val: int
+
+    def __eq__(self, other):
+        return self.val == other
+
+    def __lt__(self, other):
+        return self.val < other
+
+    def __repr__(self):
+        return f"LogLevel({self.name}, {self.val})"
+
+    def __hash__(self):
+        return hash(self.val)
+
+    def __int__(self):
+        return self.val
+
+    @classmethod
+    def register(cls, name, val):
+        log_level = cls(name, val)
+        assert name not in LOG_LEVELS
+        LOG_LEVELS[name] = log_level
+        return log_level
+
+
+# Used for extremely noisy logging (maybe still useful for debugging)
+TRACE = LogLevel.register("TRACE", 5)
+# Used for important results (not an error, but less noisy than INFO)
+RESULTS = LogLevel.register("RESULTS", 35)
+
+# These have the same value as the standard library logging levels
+DEBUG = LogLevel.register("DEBUG", 10)
+INFO = LogLevel.register("INFO", 20)
+WARNING = LogLevel.register("WARNING", 30)
+ERROR = LogLevel.register("ERROR", 40)
+CRITICAL = LogLevel.register("CRITICAL", 50)
 
 
 def init(log_dir="runs", run_name=None):
@@ -139,67 +185,6 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def log(table=None, row=None, step=None):
-    logger = get_logger()
-
-    # Most of this function is magic to figure out how to produce a Row object
-    # based on minimal arguments.
-
-    # Special case only a row-like passed in as the first argument
-    # e.g. log({'x': x}) or log(Row('grad_step', {'x': x}))
-    if isinstance(table, (dict, Row)) and row is None and step is None:
-        row = table
-        table = None
-
-    # Check all the types
-    if table is not None:
-        assert isinstance(table, str)
-    if row is not None and not isinstance(row, (dict, Row)):
-        raise ValueError(
-            f"Unsupported row type {type(row)}. "
-            "Use a dictionary or inherit from stick.Row."
-        )
-    if step is not None:
-        assert isinstance(step, int)
-
-    # Check what we have
-    if isinstance(row, Row):
-        # We have a row, so we won't need to guess any info
-        # Arguments might still override parts of the Row object
-        # e.g. log(Row('grad_step', {'x': x}), table='grad_step2')
-        # e.g. log(Row('grad_step', {'x': x}), step=0)
-        if table is None and step is None:
-            # Case 1: We have a row, just log it
-            logger.log_row(row=row)
-        elif isinstance(table, str) and step is None:
-            # Case 2: User provided the table and not a step, recompute the step
-            step = logger.get_default_step(table)
-            logger.log_row(replace(row, table_name=table, step=step))
-        elif isinstance(table, str) and isinstance(step, int):
-            # Case 3: User provided the table and step
-            logger.log_row(replace(row, table_name=table, step=step))
-    elif isinstance(table, str) and isinstance(row, dict):
-        # No inspecting required, just need to figure out the step
-        # e.g. log('grad_step', {'x': x})
-        if step is None:
-            step = logger.get_default_step(table)
-        logger.log_row(Row(raw=row, table_name=table, step=step))
-    else:
-        # We do not have a Row, row is either a dict or None
-        # We need to figure out either our table name or row contents using
-        # inspect.
-        # e.g. log({'x': x}) or log() or log(table='x')
-        stack = inspect.stack()
-        frame_info = stack[1]
-        if table is None:
-            table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
-        if step is None:
-            step = logger.get_default_step(table)
-        if row is None:
-            row = frame_info.frame.f_locals
-        logger.log_row(Row(raw=row, table_name=table, step=step))
-
-
 LOGGER_STACK = []
 
 
@@ -227,7 +212,13 @@ class LoggerError(ValueError):
 class Row:
     table_name: str
     raw: Any
+
+    # "Should" be monotonically increasing, but not necessarily sequential
     step: int
+
+    # If someone is manually creating a Row, probably default to INFO (the
+    # default logging level)
+    log_level: int = INFO
 
     def as_flat_dict(self, prefix="") -> FlatDict:
         flat_dict = {}
@@ -298,7 +289,14 @@ class Logger:
 
 
 class OutputEngine:
+    def __init__(self, log_level):
+        self.log_level = log_level
+
     def log_row(self, row: Row):
+        if row.log_level >= self.log_level:
+            self.log_row_inner(row)
+
+    def log_row_inner(self, row: Row):
         pass
 
     def close(self):
@@ -339,8 +337,11 @@ def setup_default_logger(log_dir, run_name):
 
 
 def load_log_file(
-    filename: str, keys: Optional[list[str]]
+    filename: str, keys: Optional[list[str]] = None
 ) -> dict[str, list[ScalarTypes]]:
+    # Import the json output engine, since it has no external deps
+    import stick.json_output
+
     _, ext = os.path.splitext(filename)
     if ext in LOAD_FILETYPES:
         return LOAD_FILETYPES[ext](filename, keys)
@@ -350,6 +351,120 @@ def load_log_file(
             "a stick backend or use one of the well known log "
             "types (.ndjson)"
         )
+
+
+def log(
+    table: Optional[Union[str, dict, Row]] = None,
+    row: Optional[Union[dict, Row]] = None,
+    step: Optional[int] = None,
+    level: Optional[Union[int, LogLevel]] = None,
+):
+    """Primary logging entrypoint.
+
+    Shorthand for constructing a row and calling get_logger().log_row(row).
+    Will deduce any non-provided arguments.
+
+    If a Row object is provided, it contains all required fields and will be
+    passed to log_row, with arguments overriding the row fields if provided.
+
+    If the first argument is a str, it becomes the table name.
+    If the first argument is a dict, the table name is derived from the calling
+    file and line number.
+
+    If the row is not provided, locals from the calling function will be
+    logged, and the log_level will be set to TRACE (log level 5).
+    In other cases, level defaults to INFO (log level 10), which is also the
+    default value for most output engines.
+
+    Step determines the "X axis" of the logged data. If not provided it will
+    automatically be incremented every call with the same table.
+
+    Examples:
+
+    # Will log all local variables at log level TRACE
+    log()
+
+    # Will log all local variables at log level TRACE to table called 'grad_step'
+    log('grad_step')
+
+    # Will log into table based on current file and line number at log level INFO
+    log({'x': x})
+    """
+
+    logger = get_logger()
+
+    # Most of this function is magic to figure out how to produce a Row object
+    # based on minimal arguments.
+
+    # Special case only a row-like passed in as the first argument
+    # e.g. log({'x': x}) or log(Row('grad_step', {'x': x}))
+    if isinstance(table, (dict, Row)) and row is None and step is None:
+        row = table
+        table = None
+
+    # Check all the types
+    if table is not None:
+        assert isinstance(table, str)
+    if row is not None and not isinstance(row, (dict, Row)):
+        raise ValueError(
+            f"Unsupported row type {type(row)}. "
+            "Use a dictionary or inherit from stick.Row."
+        )
+    if step is not None:
+        assert isinstance(step, int)
+
+    # Check what we have
+    if isinstance(row, Row):
+        if level is not None:
+            row = replace(row, log_level=level)
+        # We have a row, so we won't need to guess any info
+        # Arguments might still override parts of the Row object
+        # e.g. log(Row('grad_step', {'x': x}), table='grad_step2')
+        # e.g. log(Row('grad_step', {'x': x}), step=0)
+        if table is None and step is None:
+            # Case 1: We have a row, just log it
+            logger.log_row(row=row)
+        elif isinstance(table, str) and step is None:
+            # Case 2: User provided the table and not a step, recompute the step
+            step = logger.get_default_step(table)
+            logger.log_row(replace(row, table_name=table, step=step))
+        elif isinstance(table, str) and isinstance(step, int):
+            # Case 3: User provided the table and step
+            logger.log_row(replace(row, table_name=table, step=step))
+    elif isinstance(table, str) and isinstance(row, dict):
+        # No inspecting required, just need to figure out the step
+        # e.g. log('grad_step', {'x': x})
+        if step is None:
+            step = logger.get_default_step(table)
+        if level is None:
+            level = INFO
+        logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
+    else:
+        # We do not have a Row, row is either a dict or None
+        # We need to figure out either our table name or row contents using
+        # inspect.
+        # e.g. log({'x': x}) or log() or log(table='x')
+        stack = inspect.stack()
+        frame_info = stack[1]
+        if table is None:
+            table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
+        if step is None:
+            step = logger.get_default_step(table)
+        if row is None:
+            row = frame_info.frame.f_locals
+            if level is None:
+                level = TRACE
+            # Since we're inferring the row from the locals, there's likely a
+            # `self` variable. Replace the `self` key with the type name of the
+            # self, since that's more informative.
+            if "self" in row:
+                type_name = type(row["self"]).__name__
+                if type_name not in row:
+                    row[type_name] = row["self"]
+                    del row["self"]
+        if level is None:
+            level = INFO
+        logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
 
 
 def test_log_pprint(tmp_path):

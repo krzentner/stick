@@ -1,7 +1,7 @@
 """Handles converting raw data to flattened dictionaries for logging."""
 from typing import Any, Union
 
-STICK_PREPROCESSOR = "__stick_preprocessor__"
+STICK_PREPROCESSOR = "stick_preprocess"
 
 SKIP = object()
 
@@ -38,6 +38,8 @@ def flatten(src: Any, prefix: str, dst: FlatDict):
         dst[key] = src
     elif isinstance(src, dict) and (len(src) <= MAX_SEQ_LEN or not prefix):
         for k, v in src.items():
+            if isinstance(k, int):
+                continue
             try:
                 if prefix:
                     flat_k = f"{prefix}/{k}"

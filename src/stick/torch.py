@@ -9,16 +9,22 @@ def process_tensor(tensor, key, dst):
     if tensor.flatten().shape == (1,):
         dst[key] = tensor.flatten().item()
     else:
-        dst[f"{key}.mean()"] = torch.mean(tensor, dtype=torch.float32).item()
+        dst[f"{key}.mean"] = torch.mean(tensor, dtype=torch.float32).item()
         try:
-            dst[f"{key}.std()"] = torch.std(tensor).item()
+            dst[f"{key}.min"] = tensor.min().item()
+            dst[f"{key}.max"] = tensor.max().item()
+        except RuntimeError:
+            pass
+        try:
+            dst[f"{key}.std"] = torch.std(tensor).item()
         except RuntimeError:
             pass
 
 
 @declare_processor(nn.Module)
 def process_module(module, key, dst):
-    for name, param in module.named_parameters():
+    # for name, param in module.named_parameters():
+    for name, param in module.state_dict().items():
         flatten(param, f"{key}.{name}", dst)
         if param.grad is not None:
             flatten(param.grad, f"{key}.{name}.grad", dst)
