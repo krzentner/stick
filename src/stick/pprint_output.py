@@ -7,7 +7,12 @@ from stick import OutputEngine, declare_output_engine
 
 @declare_output_engine
 class PPrintOutputEngine(OutputEngine):
-    def __init__(self, file: stick.utils.FileIsh = None, flatten: bool = True, log_level=stick.RESULTS):
+    def __init__(
+        self,
+        file: stick.utils.FileIsh = None,
+        flatten: bool = True,
+        log_level=stick.RESULTS,
+    ):
         super().__init__(log_level=log_level)
         self.fm = stick.utils.FileManager(file)
         self.flatten = flatten

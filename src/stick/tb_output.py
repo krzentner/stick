@@ -36,10 +36,12 @@ class TensorBoardOutput(OutputEngine):
         if SummaryWriter is None:
             raise ImportError("Could not find tensorboard API")
 
-        self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
+        self.writer = SummaryWriter(log_dir, run_name, flush_secs=flush_secs)
         self.run_name = run_name
-        print(f"Created TensorBoardOutput with log level: "
-              f"{self.log_level} in directory {log_dir}/{run_name}")
+        print(
+            f"Created TensorBoardOutput with log level: "
+            f"{self.log_level} in directory {log_dir}/{run_name}"
+        )
 
     def log_row_inner(self, row):
         if row.table_name == "hparams":
@@ -59,7 +61,9 @@ class TensorBoardOutput(OutputEngine):
                     try:
                         self.writer.add_scalar(f"{row.table_name}/{k}", v, row.step)
                     except (TypeError, NotImplementedError) as ex:
-                        warn(LoggerWarning(f"Could not log key {k} in TensorBoard: {ex}"))
+                        warn(
+                            LoggerWarning(f"Could not log key {k} in TensorBoard: {ex}")
+                        )
         self.writer.flush()
 
     def close(self):

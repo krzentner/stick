@@ -27,7 +27,7 @@ FlatDict = dict[str, Union[None, str, float, int, bool]]
 
 def flatten(src: Any, prefix: str, dst: FlatDict):
     """Lossfully flatten a dictionary."""
-    if prefix == '_':
+    if prefix == "_":
         return
     if isinstance(src, ScalarTypes):
         key = prefix

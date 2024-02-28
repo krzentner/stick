@@ -42,9 +42,9 @@ class ArrowOutputEngine(stick.OutputEngine):
 
     def log_row_inner(self, row):
         msg = row.as_flat_dict()
-        msg['$step'] = row.step
-        msg['$utc_timestamp'] = datetime.datetime.utcnow().timestamp()
-        msg['$level'] = int(row.log_level)
+        msg["$step"] = row.step
+        msg["$utc_timestamp"] = datetime.datetime.utcnow().timestamp()
+        msg["$level"] = int(row.log_level)
 
         record = pa.RecordBatch.from_pylist([msg])
 
@@ -67,7 +67,8 @@ class ArrowOutputEngine(stick.OutputEngine):
                     if writer.schema[i] != record.schema[i]:
                         error_msgs.append(
                             f"Schema mismatch at index {i}: "
-                            f"{writer.schema[i]} vs {record.schema[i]}")
+                            f"{writer.schema[i]} vs {record.schema[i]}"
+                        )
                 raise ValueError("\n".join(error_msgs))
 
     def close(self):
@@ -79,9 +80,9 @@ class ArrowOutputEngine(stick.OutputEngine):
         path = f"{self.base_path}/{self.run_name}/{table}{ext}"
         # print("creating writer", path)
         stream = self.fs.open_output_stream(path)
-        if ext == '.csv':
+        if ext == ".csv":
             return pa.csv.CSVWriter(stream, schema)
-        elif ext == '.parquet':
+        elif ext == ".parquet":
             return pa.parquet.ParquetWriter(stream, schema)
 
 
@@ -91,13 +92,17 @@ def load_parquet_file(
     table = pa.parquet.read_table(filename, columns=keys)
     return table.to_pydict()
 
-stick.LOAD_FILETYPES['.parquet'] = load_parquet_file
+
+stick.LOAD_FILETYPES[".parquet"] = load_parquet_file
 
 
 def load_csv_file(
     filename: str, keys: Optional[list[str]]
 ) -> dict[str, list[stick.flat_utils.ScalarTypes]]:
-    table = pa.csv.read_csv(filename, read_options=pa.csv.ReadOptions(column_names=keys))
+    table = pa.csv.read_csv(
+        filename, read_options=pa.csv.ReadOptions(column_names=keys)
+    )
     return table.to_pydict()
 
-stick.LOAD_FILETYPES['.csv'] = load_csv_file
+
+stick.LOAD_FILETYPES[".csv"] = load_csv_file

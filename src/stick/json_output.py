@@ -12,7 +12,12 @@ from stick.flat_utils import ScalarTypes
 
 @stick.declare_output_engine
 class JsonOutputEngine(stick.OutputEngine):
-    def __init__(self, file: stick.utils.FileIsh = None, flatten: bool = True, log_level=stick.TRACE):
+    def __init__(
+        self,
+        file: stick.utils.FileIsh = None,
+        flatten: bool = True,
+        log_level=stick.TRACE,
+    ):
         super().__init__(log_level=log_level)
         self.fm = stick.utils.FileManager(file)
         self.flatten = flatten
@@ -184,11 +189,12 @@ def load_ndjson_log_file(
 
                 warnings.warn(f"Could not load line {i} of file {filename}")
             else:
-                table = row['$table']
+                table = row["$table"]
                 try:
-                    step = row['$step']
+                    step = row["$step"]
                 except KeyError:
                     import warnings
+
                     warnings.warn(f"No step for table {table!r}")
                 else:
                     step_key = f"$step.{table}"
@@ -197,7 +203,7 @@ def load_ndjson_log_file(
                     else:
                         data[step_key] = [step]
                 for k, v in row.items():
-                    if not k.startswith('$'):
+                    if not k.startswith("$"):
                         full_key = f"{table}.{k}"
                         if key_set is None or full_key in key_set:
                             if full_key in data:
@@ -209,4 +215,5 @@ def load_ndjson_log_file(
     else:
         return data
 
-stick.LOAD_FILETYPES['.ndjson'] = load_ndjson_log_file
+
+stick.LOAD_FILETYPES[".ndjson"] = load_ndjson_log_file

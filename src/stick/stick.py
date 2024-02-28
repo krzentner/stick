@@ -18,6 +18,7 @@ INIT_CALLED = False
 
 LOG_LEVELS = {}
 
+
 @dataclass(eq=False, order=False, frozen=True)
 @functools.total_ordering
 class LogLevel:
