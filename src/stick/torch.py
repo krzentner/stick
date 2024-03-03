@@ -23,8 +23,7 @@ def process_tensor(tensor, key, dst):
 
 @declare_processor(nn.Module)
 def process_module(module, key, dst):
-    # for name, param in module.named_parameters():
-    for name, param in module.state_dict().items():
+    for name, param in module.named_parameters():
         flatten(param, f"{key}.{name}", dst)
         if param.grad is not None:
             flatten(param.grad, f"{key}.{name}.grad", dst)

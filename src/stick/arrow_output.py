@@ -62,14 +62,19 @@ class ArrowOutputEngine(stick.OutputEngine):
                 writer.write(record)
             except ValueError:
                 # Probably a schema mis-match
-                error_msgs = []
+                error_msgs = [f"While logging table {row.table_name}:"]
                 for i in range(min(len(writer.schema), len(record.schema))):
                     if writer.schema[i] != record.schema[i]:
                         error_msgs.append(
                             f"Schema mismatch at index {i}: "
                             f"{writer.schema[i]} vs {record.schema[i]}"
                         )
+                if len(error_msgs) > 3:
+                    error_msgs = error_msgs[:3]
+                    error_msgs.append("...")
                 raise ValueError("\n".join(error_msgs))
+                # raise ValueError(error_msgs[0])
+                # prior_data = pa.parquet.read_table(writer.filename)
 
     def close(self):
         for writers in self.writers.values():

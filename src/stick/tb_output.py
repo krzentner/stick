@@ -36,7 +36,7 @@ class TensorBoardOutput(OutputEngine):
         if SummaryWriter is None:
             raise ImportError("Could not find tensorboard API")
 
-        self.writer = SummaryWriter(log_dir, run_name, flush_secs=flush_secs)
+        self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
         self.run_name = run_name
         print(
             f"Created TensorBoardOutput with log level: "
@@ -47,14 +47,14 @@ class TensorBoardOutput(OutputEngine):
         if row.table_name == "hparams":
             flat_dict = row.as_flat_dict()
             hparams = {
-                k: v for (k, v) in flat_dict.items() if not k.startswith("hparam")
+                k: v for (k, v) in flat_dict.items() if not k.startswith("metric")
             }
-            metrics = {k: v for (k, v) in flat_dict.items() if k.startswith("hparam")}
+            metrics = {k: v for (k, v) in flat_dict.items() if k.startswith("metric")}
             # Handle tensorboardX API difference
             try:
-                self.writer.add_hparams(hparams, metrics, run_name=self.run_name)
+                self.writer.add_hparams(hparams, metrics, run_name='hparams')
             except TypeError:
-                self.writer.add_hparams(hparams, metrics, name=self.run_name)
+                self.writer.add_hparams(hparams, metrics, name='hparams')
         else:
             for k, v in row.as_flat_dict().items():
                 if v is not None and not isinstance(v, str):
