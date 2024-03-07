@@ -52,9 +52,9 @@ class TensorBoardOutput(OutputEngine):
             metrics = {k: v for (k, v) in flat_dict.items() if k.startswith("metric")}
             # Handle tensorboardX API difference
             try:
-                self.writer.add_hparams(hparams, metrics, run_name='hparams')
+                self.writer.add_hparams(hparams, metrics, run_name="hparams")
             except TypeError:
-                self.writer.add_hparams(hparams, metrics, name='hparams')
+                self.writer.add_hparams(hparams, metrics, name="hparams")
         else:
             for k, v in row.as_flat_dict().items():
                 if v is not None and not isinstance(v, str):
