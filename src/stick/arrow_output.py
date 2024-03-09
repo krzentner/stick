@@ -45,6 +45,7 @@ class ArrowOutputEngine(stick.OutputEngine):
         msg["$step"] = row.step
         msg["$utc_timestamp"] = datetime.datetime.utcnow().timestamp()
         msg["$level"] = int(row.log_level)
+        msg = dict(sorted(msg.items()))
 
         record = pa.RecordBatch.from_pylist([msg])
 

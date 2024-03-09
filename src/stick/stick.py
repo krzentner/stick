@@ -224,7 +224,6 @@ class Row:
     def as_flat_dict(self, prefix="") -> FlatDict:
         flat_dict = {}
         flatten(self.raw, prefix, flat_dict)
-        flat_dict = dict(sorted(flat_dict.items()))
         return flat_dict
 
 
