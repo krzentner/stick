@@ -35,7 +35,7 @@ def checkpoint_repo(
         checkpoint_branch = repo.create_head(STICK_CHECKPOINTS_BRANCH)
     with tempfile.TemporaryDirectory() as tmp_dir:
         # Ask gitpython to create an index for us in this temporary directory.
-        index_path = os.path.join(tmp_dir, 'stick_git_index')
+        index_path = os.path.join(tmp_dir, "stick_git_index")
         index_file = git.IndexFile(repo, index_path)
         # There appears to be no way to add all modified files to an IndexFile
         # using gitpython.
@@ -45,7 +45,9 @@ def checkpoint_repo(
             index_file.add(f)
         checkpoint_commit = index_file.commit(
             f"stick checkpoint of {run_dir}",
-            [checkpoint_branch.commit], head=False, skip_hooks=True
+            [checkpoint_branch.commit],
+            head=False,
+            skip_hooks=True,
         )
         checkpoint_branch.reference = checkpoint_commit
         print(
@@ -114,7 +116,9 @@ def get_modified_file_list(git_root_path: str) -> list[str]:
     ).strip()
     repo_size = 0
     files_to_archive = []
-    file_list = [os.path.join(git_root_path, f.decode()) for f in git_files.split(b"\0")]
+    file_list = [
+        os.path.join(git_root_path, f.decode()) for f in git_files.split(b"\0")
+    ]
     for f in file_list:
         try:
             file_stats = os.stat(f)

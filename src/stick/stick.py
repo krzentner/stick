@@ -79,7 +79,8 @@ def init(log_dir="runs", run_name=None) -> str:
         if os.path.exists(run_name):
             raise ValueError(
                 "Could not create a unique default run name. "
-                "Most likely two runs began at the same time.")
+                "Most likely two runs began at the same time."
+            )
 
     run_dir = os.path.abspath(os.path.join(log_dir, run_name))
 
