@@ -3,17 +3,16 @@ import tempfile
 import os
 from typing import Optional, Any
 import warnings
+from stat import S_ISREG
 
 import git
-
-from stick.utils import PathIsh
 
 EIGHT_MEBIBYTES = 8 * 2**20
 STICK_CHECKPOINTS_BRANCH = "stick-checkpoints"
 
 
 def checkpoint_repo(
-    run_dir: PathIsh, launcher_path: Optional[PathIsh] = None
+    run_dir: str, launcher_path: Optional[str] = None
 ) -> dict[str, Any]:
     """Find the git repo, starting from __main__ or launcher_path (if
     provided), and create a new git commit on the stick-checkpoints branch.
@@ -34,7 +33,9 @@ def checkpoint_repo(
         checkpoint_branch = repo.heads[STICK_CHECKPOINTS_BRANCH]
     else:
         checkpoint_branch = repo.create_head(STICK_CHECKPOINTS_BRANCH)
-    with tempfile.TemporaryFile("w") as index_path:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Ask gitpython to create an index for us in this temporary directory.
+        index_path = os.path.join(tmp_dir, 'stick_git_index')
         index_file = git.IndexFile(repo, index_path)
         # There appears to be no way to add all modified files to an IndexFile
         # using gitpython.
@@ -42,13 +43,14 @@ def checkpoint_repo(
         # `git add -a`?
         for f in get_modified_file_list(git_root_path):
             index_file.add(f)
-        checkpoint_commit = checkpoint_branch.commit(
-            "stick checkpoint", [checkpoint_branch.commit], head=False, skip_hooks=True
+        checkpoint_commit = index_file.commit(
+            f"stick checkpoint of {run_dir}",
+            [checkpoint_branch.commit], head=False, skip_hooks=True
         )
         checkpoint_branch.reference = checkpoint_commit
         print(
             f"Saved code to git commit f{checkpoint_commit.hexsha} on "
-            f"branch f{STICK_CHECKPOINTS_BRANCH}"
+            f"branch {STICK_CHECKPOINTS_BRANCH}"
         )
         git_hash = checkpoint_commit.hexsha
         subprocess.run(
@@ -81,7 +83,7 @@ def checkpoint_repo(
         }
 
 
-def get_git_root(start_path: Optional[PathIsh] = None) -> Optional[bytes]:
+def get_git_root(start_path: Optional[str] = None) -> Optional[str]:
     if start_path is None:
         import __main__ as main
 
@@ -99,10 +101,10 @@ def get_git_root(start_path: Optional[PathIsh] = None) -> Optional[bytes]:
         git_root_path = git_root_path.strip()
     except subprocess.CalledProcessError:
         return None
-    return git_root_path
+    return git_root_path.decode()
 
 
-def get_modified_file_list(git_root_path: bytes) -> list[bytes]:
+def get_modified_file_list(git_root_path: str) -> list[str]:
     # List all non-excluded files
     # This is basically all files listed by `git status`, but separated by nul
     # characters.
@@ -112,12 +114,13 @@ def get_modified_file_list(git_root_path: bytes) -> list[bytes]:
     ).strip()
     repo_size = 0
     files_to_archive = []
-    file_list = git_files.split(b"\0")
+    file_list = [os.path.join(git_root_path, f.decode()) for f in git_files.split(b"\0")]
     for f in file_list:
         try:
-            file_size = os.stat(os.path.join(git_root_path, f)).st_size
+            file_stats = os.stat(f)
+            file_size = file_stats.st_size
             repo_size += file_size
-            if file_size < EIGHT_MEBIBYTES:
+            if file_size < EIGHT_MEBIBYTES and S_ISREG(file_stats.st_mode):
                 files_to_archive.append(f)
         except FileNotFoundError:
             pass
@@ -127,4 +130,4 @@ def get_modified_file_list(git_root_path: bytes) -> list[bytes]:
             "slow. Set create_git_checkpoint=False in init_extra "
             "to disable this feature."
         )
-    return file_list
+    return files_to_archive

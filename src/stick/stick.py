@@ -62,13 +62,24 @@ ERROR = LogLevel.register("ERROR", 40)
 CRITICAL = LogLevel.register("CRITICAL", 50)
 
 
+def default_run_name():
+    main_file = getattr(sys.modules.get("__main__"), "__file__", "interactive")
+    file_trail = os.path.splitext(os.path.basename(main_file))[0]
+    now = datetime.datetime.now().isoformat()
+    return f"{file_trail}_{now}"
+
+
 def init(log_dir="runs", run_name=None) -> str:
     """Initializes a logger in {log_dir}/{run_name} with default backends.
 
-    Run name will default to current time in ISO 8601 format.
+    Run name will default to the main file and current time in ISO 8601 format.
     """
     if run_name is None:
-        run_name = datetime.datetime.now().isoformat()
+        run_name = default_run_name()
+        if os.path.exists(run_name):
+            raise ValueError(
+                "Could not create a unique default run name. "
+                "Most likely two runs began at the same time.")
 
     run_dir = os.path.abspath(os.path.join(log_dir, run_name))
 
@@ -143,7 +154,7 @@ def init_extra(
         try:
             import stick.stick_git
 
-            stick_git.checkpoint_repo(run_dir)
+            stick.stick_git.checkpoint_repo(run_dir)
         except ImportError:
             warnings.warn(
                 LoggerWarning("could not import git, repo was not checkpointed")
