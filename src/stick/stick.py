@@ -8,6 +8,7 @@ from typing import Any, Type, Union, Optional
 import warnings
 import time
 import functools
+import datetime
 
 import stick
 from stick.flat_utils import flatten, FlatDict, ScalarTypes
@@ -61,19 +62,33 @@ ERROR = LogLevel.register("ERROR", 40)
 CRITICAL = LogLevel.register("CRITICAL", 50)
 
 
-def init(log_dir="runs", run_name=None):
+def init(log_dir="runs", run_name=None) -> str:
+    """Initializes a logger in {log_dir}/{run_name} with default backends.
+
+    Run name will default to current time in ISO 8601 format.
+    """
     if run_name is None:
-        run_name = str(time.time())
+        run_name = datetime.datetime.now().isoformat()
+
+    run_dir = os.path.abspath(os.path.join(log_dir, run_name))
 
     global INIT_CALLED
     if INIT_CALLED:
-        warnings.warn(LoggerWarning("stick.init() already called in this process"))
-        return
+        warnings.warn(
+            LoggerWarning(
+                "stick.init() already called in this process. Most "
+                "likely stick.log() was called before stick.init()."
+            )
+        )
+        return run_dir
     INIT_CALLED = True
 
     if LOGGER_STACK:
-        warnings.warn(LoggerWarning("stick.log() called before calling stick.init()"))
+        warnings.warn(
+            LoggerWarning("logger was already present before stick.init() was called")
+        )
     LOGGER_STACK.append(setup_default_logger(log_dir, run_name))
+    return run_dir
 
 
 INIT_EXTRA_CALLED = False
@@ -87,8 +102,9 @@ def init_extra(
     init_dotenv=True,
     init_wandb=True,
     seed_all="if_present",
+    create_git_checkpoint=True,
 ):
-    init(log_dir, run_name)
+    run_dir = init(log_dir, run_name)
     global INIT_EXTRA_CALLED
     if INIT_EXTRA_CALLED:
         return
@@ -109,6 +125,7 @@ def init_extra(
             warnings.warn(LoggerWarning("could not import dotenv"))
         else:
             load_dotenv()
+
     if init_wandb:
         try:
             import wandb
@@ -121,6 +138,16 @@ def init_extra(
             wandb_kwargs.setdefault("sync_tensorboard", True)
             wandb_kwargs.setdefault("config", config)
             wandb.init(**wandb_kwargs)
+
+    if create_git_checkpoint:
+        try:
+            import stick.stick_git
+
+            stick_git.checkpoint_repo(run_dir)
+        except ImportError:
+            warnings.warn(
+                LoggerWarning("could not import git, repo was not checkpointed")
+            )
 
     if seed_all:
         assert seed_all is True or seed_all == "if_present"

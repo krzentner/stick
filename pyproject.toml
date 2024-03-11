@@ -31,8 +31,31 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+git = [
+  "GitPython",
+]
+wandb = [
+  "wandb"
+]
+torch = [
+  "torch"
+]
+pyarrow = [
+  "pyarrow"
+]
+dotenv = [
+  "dotenv"
+]
+tensorboardX = [
+  "tensorboardX"
+]
 dev = []
 test = ["pytest"]
+recommended = [
+  "GitPython",
+  "pyarrow",
+  "tensorboardX",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/krzentner/stick"
