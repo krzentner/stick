@@ -1,5 +1,5 @@
-from warnings import warn
-from stick import OutputEngine, declare_output_engine, LoggerWarning, INFO
+from stick import OutputEngine, declare_output_engine, INFO
+from stick.stick import _warn_internal
 
 SummaryWriter = None
 
@@ -38,10 +38,7 @@ class TensorBoardOutput(OutputEngine):
 
         self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
         self.run_name = run_name
-        print(
-            f"Created TensorBoardOutput with log level: "
-            f"{self.log_level} in directory {log_dir}/{run_name}"
-        )
+        print(f"TensorBoardOutput [{self.log_level}] in: " f"{log_dir}/{run_name}")
 
     def log_row_inner(self, row):
         if row.table_name == "hparams":
@@ -61,9 +58,7 @@ class TensorBoardOutput(OutputEngine):
                     try:
                         self.writer.add_scalar(f"{row.table_name}/{k}", v, row.step)
                     except (TypeError, NotImplementedError) as ex:
-                        warn(
-                            LoggerWarning(f"Could not log key {k} in TensorBoard: {ex}")
-                        )
+                        _warn_internal(f"Could not log key {k} in TensorBoard: {ex}")
         self.writer.flush()
 
     def close(self):

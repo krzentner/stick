@@ -55,6 +55,7 @@ recommended = [
   "GitPython",
   "pyarrow",
   "tensorboardX",
+  "dotenv",
 ]
 
 [project.urls]
