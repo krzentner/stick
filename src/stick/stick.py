@@ -115,11 +115,11 @@ def init_extra(
     init_wandb=True,
     seed_all="if_present",
     create_git_checkpoint=True,
-):
+) -> str:
     run_dir = init(log_dir, run_name)
     global INIT_EXTRA_CALLED
     if INIT_EXTRA_CALLED:
-        return
+        return run_dir
     INIT_EXTRA_CALLED = True
 
     if config is None:
@@ -182,6 +182,7 @@ def init_extra(
                 "Explicitly asked to seed, " "but seed is not present in config"
             )
     log(table="hparams", row=config_as_dict)
+    return run_dir
 
 
 def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
