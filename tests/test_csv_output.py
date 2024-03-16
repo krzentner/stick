@@ -3,7 +3,8 @@ import csv
 import stick
 from stick.csv_output import CSVOutputEngine
 
-stick.setup_py_logging('runs/stick_tests')
+stick.setup_py_logging("runs/stick_tests")
+
 
 def test_write(tmp_path):
     run_name = "test_run"
@@ -28,7 +29,7 @@ def test_write(tmp_path):
     with open(f"{tmp_path}/{run_name}/test_table1.csv") as f:
         content = f.read()
     lines = content.split("\n")
-    assert lines[0] == "$level,$step,$utc_timestamp,x,y"
+    assert lines[0] == "$level,$localtime,$step,$utc_timestamp,x,y"
     assert lines[1].endswith("1,0")
     assert lines[2].endswith("1,3")
     # There's one trailing newline:

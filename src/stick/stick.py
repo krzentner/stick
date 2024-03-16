@@ -402,7 +402,7 @@ def load_log_file(
         raise ValueError(
             f"Unknown filetype {ext}. Perhaps you need to load "
             "a stick backend or use one of the well known log "
-            "types (.ndjson)"
+            "types (.ndjson or .csv)"
         )
 
 

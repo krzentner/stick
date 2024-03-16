@@ -69,5 +69,5 @@ class LoggerWarning(UserWarning):
 
 
 def warn_internal(msg):
-    logging.getLogger('stick').warning(msg)
+    logging.getLogger("stick").warning(msg)
     # warnings.warn(LoggerWarning(msg))

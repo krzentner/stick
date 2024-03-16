@@ -3,6 +3,7 @@ import enum
 import json
 import time
 from typing import Optional
+import datetime
 
 
 import stick
@@ -31,6 +32,7 @@ class JsonOutputEngine(stick.OutputEngine):
             {
                 "$table": row.table_name,
                 "$localtime": time.localtime(),
+                "$utc_timestamp": datetime.datetime.utcnow().timestamp(),
                 "$step": row.step,
                 "$level": row.log_level,
             }

@@ -3,6 +3,7 @@ import re
 import os
 from typing import Optional, Union
 import csv
+import time
 
 import stick
 from stick.flat_utils import ScalarTypes
@@ -24,10 +25,14 @@ class CSVOutputEngine(stick.OutputEngine):
 
     def log_row_inner(self, row: stick.Row):
         msg = row.as_flat_dict()
-        msg["$step"] = row.step
-        msg["$utc_timestamp"] = datetime.datetime.utcnow().timestamp()
-        msg["$level"] = int(row.log_level)
-
+        msg.update(
+            {
+                "$localtime": time.localtime(),
+                "$utc_timestamp": datetime.datetime.utcnow().timestamp(),
+                "$step": row.step,
+                "$level": row.log_level,
+            }
+        )
         if row.table_name in self.writers:
             f, writer = self.writers[row.table_name]
         else:
@@ -65,16 +70,14 @@ def _handle_inconsistent_rows(
             new_keys.append(k)
     if len(new_keys) > 0:
         if len(new_keys) == 1:
-            warn_internal(
-                f"Adding new key {new_keys[0]!r} to table {table_name!r}"
-            )
+            warn_internal(f"Adding new key {new_keys[0]!r} to table {table_name!r}")
         elif len(new_keys) <= 3:
-            new_keys_msg = ','.join([repr(k) for k in new_keys])
+            new_keys_msg = ",".join([repr(k) for k in new_keys])
             warn_internal(
                 f"Adding {len(new_keys)} new keys [{new_keys_msg}] to table {table_name!r}"
             )
         else:
-            new_keys_msg = ','.join([repr(k) for k in new_keys[:3]])
+            new_keys_msg = ",".join([repr(k) for k in new_keys[:3]])
             warn_internal(
                 f"Adding {len(new_keys)} new keys [{new_keys_msg}, ...] to table {table_name!r}"
             )
