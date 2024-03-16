@@ -373,13 +373,13 @@ def declare_output_engine(output_engine_type):
 def setup_default_logger(log_dir, run_name):
     assert INIT_CALLED, "Call init() instead"
 
-    from stick.json_output import JsonOutputEngine
+    from stick.ndjson_output import NDJsonOutputEngine
     from stick.csv_output import CSVOutputEngine
     from stick.pprint_output import PPrintOutputEngine
     from stick.tb_output import TensorBoardOutput
 
     logger = Logger(log_dir=log_dir, run_name=run_name)
-    logger.add_output(JsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
+    logger.add_output(NDJsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
     logger.add_output(CSVOutputEngine(log_dir, run_name))
     try:
         logger.add_output(TensorBoardOutput(log_dir, run_name))
@@ -393,7 +393,7 @@ def load_log_file(
     filename: str, keys: Optional[list[str]] = None
 ) -> dict[str, list[ScalarTypes]]:
     # Import the json output engine, since it has no external deps
-    import stick.json_output
+    import stick.ndjson_output
 
     _, ext = os.path.splitext(filename)
     if ext in LOAD_FILETYPES:
@@ -540,13 +540,13 @@ def test_log_pprint(tmp_path):
 
 
 def test_log_json(tmp_path):
-    from stick.json_output import JsonOutputEngine
+    from stick.ndjson_output import NDJsonOutputEngine
     import io
 
     hi = "HI ^_^"
     f = io.StringIO()
     with Logger(log_dir=tmp_path, run_name="test_log_json") as logger:
-        logger.add_output(JsonOutputEngine(f))
+        logger.add_output(NDJsonOutputEngine(f))
         log()
         content1 = f.getvalue()
         assert hi in content1

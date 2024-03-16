@@ -1,9 +1,17 @@
 import csv
+import os
 
 import stick
 from stick.csv_output import CSVOutputEngine
 
+LOG_PATH = "runs/stick_tests/debug.log"
+os.remove(LOG_PATH)
 stick.setup_py_logging("runs/stick_tests")
+
+
+def _read_file(f_name):
+    with open(f_name) as f:
+        return [line.strip() for line in f.readlines()]
 
 
 def test_write(tmp_path):
@@ -68,6 +76,10 @@ def test_write_inconsistent_keys(tmp_path):
             step=20,
         )
     )
+    assert any(
+        line.endswith("stick [WARNING ]: Adding new key 'z' to table 'test_table1'")
+        for line in _read_file(LOG_PATH)
+    )
     output.log_row_inner(
         stick.Row(
             table_name="test_table1",
@@ -82,12 +94,24 @@ def test_write_inconsistent_keys(tmp_path):
             step=20,
         )
     )
+    assert any(
+        line.endswith(
+            "stick [WARNING ]: Adding 2 new keys ['a','b'] to table 'test_table1'"
+        )
+        for line in _read_file(LOG_PATH)
+    )
     output.log_row_inner(
         stick.Row(
             table_name="test_table1",
             raw={"q1": 1, "q2": 2, "q3": 3, "q4": 4},
             step=20,
         )
+    )
+    assert any(
+        line.endswith(
+            "stick [WARNING ]: Adding 4 new keys ['q1','q2','q3',...] to table 'test_table1'"
+        )
+        for line in _read_file(LOG_PATH)
     )
     f_name = f"{tmp_path}/{run_name}/test_table1.csv"
     data = stick.csv_output.load_csv_file(f_name)

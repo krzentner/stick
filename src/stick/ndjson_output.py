@@ -7,12 +7,12 @@ import datetime
 
 
 import stick
-from stick.utils import is_instance_str
+from stick.utils import is_instance_str, warn_internal
 from stick.flat_utils import ScalarTypes
 
 
 @stick.declare_output_engine
-class JsonOutputEngine(stick.OutputEngine):
+class NDJsonOutputEngine(stick.OutputEngine):
     def __init__(
         self,
         file: stick.utils.FileIsh = None,
@@ -39,6 +39,7 @@ class JsonOutputEngine(stick.OutputEngine):
         )
         json.dump(msg, fp=self.fm.file, cls=LogEncoder)
         self.fm.file.write("\n")
+        self.fm.file.flush()
 
     def close(self):
         self.fm.close()
@@ -174,48 +175,42 @@ class LogEncoder(json.JSONEncoder):
                 return {"$unknown": None}
 
 
-def load_ndjson_log_file(
-    filename: str, keys: Optional[list[str]]
+def load_ndjson_file(
+    filename: str, keys: Optional[list[str]] = None
 ) -> dict[str, list[ScalarTypes]]:
     data = {}
     if keys is None:
         key_set = None
     else:
         key_set = set(keys)
+    table_to_keys = {}
+    parsed_lines = []
     with open(filename) as f:
         for i, line in enumerate(f.readlines()):
             try:
                 row = json.loads(line)
             except ValueError as e:
-                import warnings
-
-                warnings.warn(f"Could not load line {i} of file {filename}")
+                warn_internal(f"Could not load line {i} of file {filename}")
             else:
-                table = row["$table"]
                 try:
-                    step = row["$step"]
+                    table = row["$table"]
                 except KeyError:
-                    import warnings
-
-                    warnings.warn(f"No step for table {table!r}")
+                    warn_internal(f"No $table in {line!r}")
                 else:
-                    step_key = f"$step.{table}"
-                    if step_key in data:
-                        data[step_key].append(step)
-                    else:
-                        data[step_key] = [step]
-                for k, v in row.items():
-                    if not k.startswith("$"):
-                        full_key = f"{table}.{k}"
-                        if key_set is None or full_key in key_set:
-                            if full_key in data:
-                                data[full_key].append(v)
-                            else:
-                                data[full_key] = [v]
-    if len(data) == 0:
+                    parsed_lines.append(row)
+                    table_to_keys.setdefault(table, set()).update(row.keys())
+    if len(parsed_lines) == 0:
         raise ValueError(f"Could not load any rows from {filename}")
-    else:
-        return data
+    data = {}
+    for table, keys in table_to_keys.items():
+        for key in keys:
+            if key_set is not None and key not in key_set:
+                continue
+            data[f"{table}.{key}"] = [
+                obj.get(key, None) for obj in parsed_lines
+                if obj.get("$table", None) == table
+            ]
+    return data
 
 
-stick.LOAD_FILETYPES[".ndjson"] = load_ndjson_log_file
+stick.LOAD_FILETYPES[".ndjson"] = load_ndjson_file

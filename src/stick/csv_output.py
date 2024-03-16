@@ -79,7 +79,7 @@ def _handle_inconsistent_rows(
         else:
             new_keys_msg = ",".join([repr(k) for k in new_keys[:3]])
             warn_internal(
-                f"Adding {len(new_keys)} new keys [{new_keys_msg}, ...] to table {table_name!r}"
+                f"Adding {len(new_keys)} new keys [{new_keys_msg},...] to table {table_name!r}"
             )
         temp_f_name = f"{f.filename}.tmp"
         with open(temp_f_name, "w") as out_f, open(f.filename) as in_f:
