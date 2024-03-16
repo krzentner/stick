@@ -74,8 +74,22 @@ def test_write_inconsistent_keys(tmp_path):
             step=20,
         )
     )
+    output.log_row_inner(
+        stick.Row(
+            table_name="test_table1",
+            raw={"a": 1, "b": 2},
+            step=20,
+        )
+    )
+    output.log_row_inner(
+        stick.Row(
+            table_name="test_table1",
+            raw={"q1": 1, "q2": 2, "q3": 3, "q4": 4},
+            step=20,
+        )
+    )
     f_name = f"{tmp_path}/{run_name}/test_table1.csv"
     data = stick.csv_output.load_csv_file(f_name)
-    data["x"] == [1, 2, 3]
-    data["y"] == [0, 0, None]
-    data["z"] == [None, 10, 20]
+    assert data["x"] == [1, 2, 3, None, None]
+    assert data["y"] == [0, 0, None, None, None]
+    assert data["z"] == [None, 10, 20, None, None]

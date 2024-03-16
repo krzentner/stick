@@ -38,6 +38,7 @@ class CSVOutputEngine(stick.OutputEngine):
             writer.writeheader()
             self.writers[row.table_name] = (f, writer)
         f, writer, msg = _handle_inconsistent_rows(row.table_name, f, writer, msg)
+        self.writers[row.table_name] = (f, writer)
         writer.writerow(msg)
         f.file.flush()
 
@@ -65,17 +66,17 @@ def _handle_inconsistent_rows(
     if len(new_keys) > 0:
         if len(new_keys) == 1:
             warn_internal(
-                f"Adding new key {new_keys[0]!r} to table {table_name}"
+                f"Adding new key {new_keys[0]!r} to table {table_name!r}"
             )
         elif len(new_keys) <= 3:
             new_keys_msg = ','.join([repr(k) for k in new_keys])
             warn_internal(
-                f"Adding {len(new_keys)} new keys [{new_keys_msg}] to table {table_name}"
+                f"Adding {len(new_keys)} new keys [{new_keys_msg}] to table {table_name!r}"
             )
         else:
             new_keys_msg = ','.join([repr(k) for k in new_keys[:3]])
             warn_internal(
-                f"Adding {len(new_keys)} new keys [{new_keys_msg}, ...] to table {table_name}"
+                f"Adding {len(new_keys)} new keys [{new_keys_msg}, ...] to table {table_name!r}"
             )
         temp_f_name = f"{f.filename}.tmp"
         with open(temp_f_name, "w") as out_f, open(f.filename) as in_f:
