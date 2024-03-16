@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Union
 import os
 import sys
-import fnmatch
 import logging
 import warnings
 
@@ -25,18 +24,6 @@ def splitall(path: PathIsh) -> list[str]:
             break
         path = head
     return list(reversed(parts))
-
-
-def is_instance_str(obj, type_names):
-    """An isinstance check that does not require importing the type's module."""
-    obj_type_str = f"{type(obj).__module__}.{type(obj).__name__}"
-    if isinstance(type_names, str):
-        return fnmatch.fnmatch(obj_type_str, type_names)
-    else:
-        for type_name in type_names:
-            if fnmatch.fnmatch(obj_type_str, type_name):
-                return True
-        return False
 
 
 class FileManager:

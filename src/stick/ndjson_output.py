@@ -7,8 +7,8 @@ import datetime
 
 
 import stick
-from stick.utils import is_instance_str, warn_internal
-from stick.flat_utils import ScalarTypes
+from stick.utils import warn_internal
+from stick.flat_utils import ScalarTypes, is_instance_str
 
 
 @stick.declare_output_engine
@@ -47,6 +47,8 @@ class NDJsonOutputEngine(stick.OutputEngine):
 
 class LogEncoder(json.JSONEncoder):
     """Encoder to be used as cls in json.dump.
+
+    Is used in NDJsonOutputEngine if flatten=False.
 
     Args:
         args (object): Passed to super class.
@@ -207,7 +209,8 @@ def load_ndjson_file(
             if key_set is not None and key not in key_set:
                 continue
             data[f"{table}.{key}"] = [
-                obj.get(key, None) for obj in parsed_lines
+                obj.get(key, None)
+                for obj in parsed_lines
                 if obj.get("$table", None) == table
             ]
     return data
