@@ -11,14 +11,13 @@ import logging
 
 import stick
 from stick.flat_utils import flatten, FlatDict, ScalarTypes
+from stick.utils import warn_internal
 
 INIT_CALLED = False
 
 # Log levels
 
 LOG_LEVELS = {}
-
-_PY_LOGGER = None
 
 
 @dataclass(eq=False, order=False, frozen=True)
@@ -67,15 +66,34 @@ ERROR = LogLevel.register("ERROR", 40)
 CRITICAL = LogLevel.register("CRITICAL", 50)
 
 
-def _warn_internal(msg):
-    _PY_LOGGER.warn(msg)
-
-
 def default_run_name():
     main_file = getattr(sys.modules.get("__main__"), "__file__", "interactive")
     file_trail = os.path.splitext(os.path.basename(main_file))[0]
     now = datetime.datetime.now().isoformat()
     return f"{file_trail}_{now}"
+
+
+def setup_py_logging(run_dir):
+    os.makedirs(run_dir, exist_ok=True)
+    FORMAT = "%(asctime)s %(name)s [%(levelname)-8.8s]: %(message)s"
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(0)
+    formatter = logging.Formatter(FORMAT, "%Y-%m-%d %H:%M:%S")
+
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setLevel(logging.WARNING)
+    stream_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(filename=os.path.join(run_dir, "debug.log"))
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(int(TRACE))
+
+    rootLogger.addHandler(file_handler)
+    rootLogger.addHandler(stream_handler)
+
+    warnings_logger = logging.getLogger("py.warnings")
+    warnings_logger.addHandler(stream_handler)
+    warnings_logger.addHandler(file_handler)
 
 
 def init(log_dir="runs", run_name=None) -> str:
@@ -92,32 +110,11 @@ def init(log_dir="runs", run_name=None) -> str:
             )
 
     run_dir = os.path.abspath(os.path.join(log_dir, run_name))
-    os.makedirs(run_dir, exist_ok=True)
-
-    FORMAT = "%(asctime)s %(name)s [%(levelname)-8.8s]: %(message)s"
-    global _PY_LOGGER
-    _PY_LOGGER = logging.getLogger("stick")
-    _PY_LOGGER.setLevel(0)
-    formatter = logging.Formatter(FORMAT, "%Y-%m-%d %H:%M:%S")
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.WARNING)
-    stream_handler.setFormatter(formatter)
-
-    file_handler = logging.FileHandler(filename=os.path.join(run_dir, "debug.log"))
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(int(TRACE))
-
-    _PY_LOGGER.addHandler(file_handler)
-    _PY_LOGGER.addHandler(stream_handler)
-
-    warnings_logger = logging.getLogger("py.warnings")
-    warnings_logger.addHandler(stream_handler)
-    warnings_logger.addHandler(file_handler)
+    setup_py_logging(run_dir)
 
     global INIT_CALLED
     if INIT_CALLED:
-        _warn_internal(
+        warn_internal(
             "stick.init() already called in this process. Most "
             "likely stick.log() was called before stick.init()."
         )
@@ -125,7 +122,7 @@ def init(log_dir="runs", run_name=None) -> str:
     INIT_CALLED = True
 
     if LOGGER_STACK:
-        _warn_internal("logger was already present before stick.init() was called")
+        warn_internal("logger was already present before stick.init() was called")
     LOGGER_STACK.append(setup_default_logger(log_dir, run_name))
     return run_dir
 
@@ -161,7 +158,7 @@ def init_extra(
         try:
             from dotenv import load_dotenv
         except ImportError:
-            _warn_internal("could not import dotenv")
+            warn_internal("could not import dotenv")
         else:
             load_dotenv()
 
@@ -169,7 +166,7 @@ def init_extra(
         try:
             import wandb
         except ImportError:
-            _warn_internal("could not import wandb")
+            warn_internal("could not import wandb")
             pass
         else:
             if wandb_kwargs is None:
@@ -184,7 +181,7 @@ def init_extra(
 
             stick.stick_git.checkpoint_repo(run_dir)
         except ImportError:
-            _warn_internal("could not import git, repo was not checkpointed")
+            warn_internal("could not import git, repo was not checkpointed")
 
     if seed_all:
         assert seed_all is True or seed_all == "if_present"
@@ -264,16 +261,6 @@ def get_logger():
 
 def add_output(output_engine):
     get_logger().add_output(output_engine)
-
-
-class LoggerWarning(UserWarning):
-    def __init__(self, msg):
-        super().__init__(msg)
-        _PY_LOGGER.warn(msg)
-
-
-class LoggerError(ValueError):
-    pass
 
 
 @dataclass
@@ -387,15 +374,17 @@ def setup_default_logger(log_dir, run_name):
     assert INIT_CALLED, "Call init() instead"
 
     from stick.json_output import JsonOutputEngine
+    from stick.csv_output import CSVOutputEngine
     from stick.pprint_output import PPrintOutputEngine
     from stick.tb_output import TensorBoardOutput
 
     logger = Logger(log_dir=log_dir, run_name=run_name)
     logger.add_output(JsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
+    logger.add_output(CSVOutputEngine(log_dir, run_name))
     try:
         logger.add_output(TensorBoardOutput(log_dir, run_name))
     except ImportError:
-        _warn_internal("tensorboard API not installed")
+        warn_internal("tensorboard API not installed")
     logger.add_output(PPrintOutputEngine(f"{log_dir}/{run_name}/stick.log"))
     return logger
 

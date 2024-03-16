@@ -4,6 +4,8 @@ from typing import Union
 import os
 import sys
 import fnmatch
+import logging
+import warnings
 
 PathIsh = Union[str, bytes, Path]
 FileIsh = Union[None, PathIsh, TextIOWrapper]
@@ -40,6 +42,7 @@ def is_instance_str(obj, type_names):
 class FileManager:
     def __init__(self, file: FileIsh = None):
         self.should_close = False
+        self.filename = file
         if file is None:
             self.file = sys.stdout
         elif isinstance(file, (str, bytes, Path)):
@@ -58,3 +61,13 @@ class FileManager:
     def close(self):
         if self.should_close:
             self.file.close()
+
+
+class LoggerWarning(UserWarning):
+    def __init__(self, msg):
+        super().__init__(msg)
+
+
+def warn_internal(msg):
+    logging.getLogger('stick').warning(msg)
+    # warnings.warn(LoggerWarning(msg))

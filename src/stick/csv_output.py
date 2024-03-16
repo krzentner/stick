@@ -5,6 +5,8 @@ from typing import Optional, Union
 import csv
 
 import stick
+from stick.flat_utils import ScalarTypes
+from stick.utils import FileManager, warn_internal
 
 
 @stick.declare_output_engine
@@ -25,23 +27,70 @@ class CSVOutputEngine(stick.OutputEngine):
         msg["$step"] = row.step
         msg["$utc_timestamp"] = datetime.datetime.utcnow().timestamp()
         msg["$level"] = int(row.log_level)
-        msg = dict(sorted(msg.items()))
 
         if row.table_name in self.writers:
             f, writer = self.writers[row.table_name]
         else:
             f_name = os.path.join(self.log_dir, self.run_name, f"{row.table_name}.csv")
-            f = stick.utils.FileManager(f_name)
+            f = FileManager(f_name)
             f.should_close = True
-            writer = csv.DictWriter(f.file, fieldnames=msg.keys())
+            writer = csv.DictWriter(f.file, fieldnames=sorted(msg.keys()))
             writer.writeheader()
             self.writers[row.table_name] = (f, writer)
+        f, writer, msg = _handle_inconsistent_rows(row.table_name, f, writer, msg)
         writer.writerow(msg)
         f.file.flush()
 
     def close(self):
         for f, writers in self.writers.values():
             f.close()
+
+
+def _handle_inconsistent_rows(
+    table_name: str,
+    f: FileManager,
+    writer: csv.DictWriter,
+    msg: dict[str, ScalarTypes],
+) -> tuple[FileManager, csv.DictWriter, dict[str, ScalarTypes]]:
+    # Fill missing keys with None
+    for k in writer.fieldnames:
+        if k not in msg:
+            msg[k] = None
+    msg = dict(sorted(msg.items()))
+    # Check for new keys
+    new_keys = []
+    for k in msg.keys():
+        if k not in writer.fieldnames:
+            new_keys.append(k)
+    if len(new_keys) > 0:
+        if len(new_keys) == 1:
+            warn_internal(
+                f"Adding new key {new_keys[0]!r} to table {table_name}"
+            )
+        elif len(new_keys) <= 3:
+            new_keys_msg = ','.join([repr(k) for k in new_keys])
+            warn_internal(
+                f"Adding {len(new_keys)} new keys [{new_keys_msg}] to table {table_name}"
+            )
+        else:
+            new_keys_msg = ','.join([repr(k) for k in new_keys[:3]])
+            warn_internal(
+                f"Adding {len(new_keys)} new keys [{new_keys_msg}, ...] to table {table_name}"
+            )
+        temp_f_name = f"{f.filename}.tmp"
+        with open(temp_f_name, "w") as out_f, open(f.filename) as in_f:
+            w = csv.DictWriter(out_f, sorted(msg.keys()))
+            w.writeheader()
+            for r in csv.DictReader(in_f):
+                for k in msg.keys():
+                    r.setdefault(k, None)
+                w.writerow(r)
+        f_name = f.filename
+        f.close()
+        os.replace(temp_f_name, f_name)
+        f = FileManager(f_name)
+        writer = csv.DictWriter(f.file, sorted(msg.keys()))
+    return f, writer, msg
 
 
 def _try_convert(s: str) -> Union[str, float]:

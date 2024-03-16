@@ -3,6 +3,7 @@ import csv
 import stick
 from stick.csv_output import CSVOutputEngine
 
+stick.setup_py_logging('runs/stick_tests')
 
 def test_write(tmp_path):
     run_name = "test_run"
