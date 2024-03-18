@@ -135,7 +135,6 @@ def init_extra(
     run_name=None,
     config=None,
     wandb_kwargs=None,
-    init_dotenv=True,
     init_wandb=True,
     seed_all="if_present",
     create_git_checkpoint=True,
@@ -153,14 +152,6 @@ def init_extra(
         config_as_dict = config
     else:
         config_as_dict = config.__dict__
-
-    if init_dotenv:
-        try:
-            from dotenv import load_dotenv
-        except ImportError:
-            warn_internal("could not import dotenv")
-        else:
-            load_dotenv()
 
     if init_wandb:
         try:

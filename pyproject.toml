@@ -43,9 +43,6 @@ torch = [
 pyarrow = [
   "pyarrow"
 ]
-dotenv = [
-  "dotenv"
-]
 tensorboardX = [
   "tensorboardX"
 ]
@@ -55,7 +52,6 @@ recommended = [
   "GitPython",
   "pyarrow",
   "tensorboardX",
-  "dotenv",
 ]
 
 [project.urls]
