@@ -20,4 +20,4 @@ def test_summarize_tensor(tmp_path):
     assert data["a.mean"] == [4.5]
     assert data["a.min"] == [0]
     assert data["a.max"] == [9]
-    assert data["a.std"][0] > 1
+    assert data["a.std"][0] > 2.5
