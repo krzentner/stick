@@ -38,7 +38,9 @@ class TensorBoardOutput(OutputEngine):
 
         self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
         self.run_name = run_name
-        print(f"TensorBoardOutput(level={self.log_level!r}) in: " f"{log_dir}/{run_name}")
+        print(
+            f"TensorBoardOutput(level={self.log_level!r}) in: " f"{log_dir}/{run_name}"
+        )
 
     def log_row_inner(self, row):
         if row.table_name == "hparams":
