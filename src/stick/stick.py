@@ -8,6 +8,7 @@ import warnings
 import functools
 import datetime
 import logging
+import enum
 
 import stick
 from stick.flat_utils import flatten, FlatDict, ScalarTypes
@@ -19,10 +20,9 @@ INIT_CALLED = False
 
 LOG_LEVELS = {}
 
-
 @dataclass(eq=False, order=False, frozen=True)
 @functools.total_ordering
-class LogLevel:
+class NamedLevel:
     name: str
     val: int
 
@@ -33,7 +33,7 @@ class LogLevel:
         return self.val < other
 
     def __repr__(self):
-        return f"LogLevel({self.name}, {self.val})"
+        return f"NamedLevel({self.name}, {self.val})"
 
     def __hash__(self):
         return hash(self.val)
@@ -53,17 +53,34 @@ class LogLevel:
         return log_level
 
 
-# Used for extremely noisy logging (maybe still useful for debugging)
-TRACE = LogLevel.register("TRACE", 5)
-# Used for important results (not an error, but less noisy than INFO)
-RESULTS = LogLevel.register("RESULTS", 35)
+@functools.total_ordering
+class LogLevels(enum.Enum):
+    # Used for extremely noisy logging (maybe still useful for debugging)
+    TRACE = NamedLevel.register("TRACE", 5)
+    # Used for important results (not an error, but less noisy than INFO)
+    RESULTS = NamedLevel.register("RESULTS", 35)
 
-# These have the same value as the standard library logging levels
-DEBUG = LogLevel.register("DEBUG", 10)
-INFO = LogLevel.register("INFO", 20)
-WARNING = LogLevel.register("WARNING", 30)
-ERROR = LogLevel.register("ERROR", 40)
-CRITICAL = LogLevel.register("CRITICAL", 50)
+    # These have the same value as the standard library logging levels
+    DEBUG = NamedLevel.register("DEBUG", 10)
+    INFO = NamedLevel.register("INFO", 20)
+    WARNING = NamedLevel.register("WARNING", 30)
+    ERROR = NamedLevel.register("ERROR", 40)
+    CRITICAL = NamedLevel.register("CRITICAL", 50)
+
+    def __int__(self):
+        return int(self.value)
+
+    def __lt__(self, other):
+        return int(self) < int(other)
+
+
+TRACE = LogLevels.TRACE
+RESULTS = LogLevels.RESULTS
+DEBUG = LogLevels.DEBUG
+INFO = LogLevels.INFO
+WARNING = LogLevels.WARNING
+ERROR = LogLevels.ERROR
+CRITICAL = LogLevels.CRITICAL
 
 
 def default_run_name():
@@ -73,7 +90,7 @@ def default_run_name():
     return f"{file_trail}_{now}"
 
 
-def setup_py_logging(run_dir):
+def setup_py_logging(run_dir, stderr_log_level=WARNING):
     os.makedirs(run_dir, exist_ok=True)
     FORMAT = "%(asctime)s %(name)s [%(levelname)-8.8s]: %(message)s"
     rootLogger = logging.getLogger()
@@ -81,7 +98,7 @@ def setup_py_logging(run_dir):
     formatter = logging.Formatter(FORMAT, "%Y-%m-%d %H:%M:%S")
 
     stream_handler = logging.StreamHandler(sys.stderr)
-    stream_handler.setLevel(logging.WARNING)
+    stream_handler.setLevel(int(stderr_log_level))
     stream_handler.setFormatter(formatter)
 
     file_handler = logging.FileHandler(filename=os.path.join(run_dir, "debug.log"))
@@ -96,7 +113,7 @@ def setup_py_logging(run_dir):
     warnings_logger.addHandler(file_handler)
 
 
-def init(log_dir="runs", run_name=None) -> str:
+def init(log_dir="runs", run_name=None, stderr_log_level=WARNING) -> str:
     """Initializes a logger in {log_dir}/{run_name} with default backends.
 
     Run name will default to the main file and current time in ISO 8601 format.
@@ -110,7 +127,7 @@ def init(log_dir="runs", run_name=None) -> str:
             )
 
     run_dir = os.path.abspath(os.path.join(log_dir, run_name))
-    setup_py_logging(run_dir)
+    setup_py_logging(run_dir, stderr_log_level)
 
     global INIT_CALLED
     if INIT_CALLED:
@@ -138,8 +155,9 @@ def init_extra(
     init_wandb=True,
     seed_all="if_present",
     create_git_checkpoint=True,
+    stderr_log_level=WARNING,
 ) -> str:
-    run_dir = init(log_dir, run_name)
+    run_dir = init(log_dir, run_name, stderr_log_level)
     global INIT_EXTRA_CALLED
     if INIT_EXTRA_CALLED:
         return run_dir
@@ -401,7 +419,7 @@ def log(
     table: Optional[Union[str, dict, Row]] = None,
     row: Optional[Union[dict, Row]] = None,
     step: Optional[int] = None,
-    level: Optional[Union[int, LogLevel]] = None,
+    level: Optional[Union[int, NamedLevel]] = None,
 ):
     """Primary logging entrypoint.
 
