@@ -74,13 +74,13 @@ class LogLevels(enum.Enum):
         return int(self) < int(other)
 
 
-TRACE = LogLevels.TRACE
-RESULTS = LogLevels.RESULTS
-DEBUG = LogLevels.DEBUG
-INFO = LogLevels.INFO
-WARNING = LogLevels.WARNING
-ERROR = LogLevels.ERROR
-CRITICAL = LogLevels.CRITICAL
+TRACE: NamedLevel = LogLevels.TRACE
+RESULTS: NamedLevel = LogLevels.RESULTS
+DEBUG: NamedLevel = LogLevels.DEBUG
+INFO: NamedLevel = LogLevels.INFO
+WARNING: NamedLevel = LogLevels.WARNING
+ERROR: NamedLevel = LogLevels.ERROR
+CRITICAL: NamedLevel = LogLevels.CRITICAL
 
 
 def default_run_name():
