@@ -58,7 +58,8 @@ class TensorBoardOutput(OutputEngine):
             for k, v in row.as_flat_dict().items():
                 if v is not None and not isinstance(v, str):
                     try:
-                        self.writer.add_scalar(f"{row.table_name}/{k}", v, row.step)
+                        self.writer.add_scalar(f"{row.table_name}/{k}".replace(':', '_'),
+                                               v, row.step)
                     except (TypeError, NotImplementedError) as ex:
                         warn_internal(f"Could not log key {k} in TensorBoard: {ex}")
         self.writer.flush()

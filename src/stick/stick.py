@@ -212,7 +212,6 @@ def init_extra(
             raise ValueError(
                 "Explicitly asked to seed, " "but seed is not present in config"
             )
-    log(table="hparams", row=config_as_dict)
     return run_dir
 
 
@@ -515,7 +514,7 @@ def log(
         if row is None:
             row = frame_info.frame.f_locals
             if level is None:
-                level = TRACE
+                level = INFO
             # Since we're inferring the row from the locals, there's likely a
             # `self` variable. Replace the `self` key with the type name of the
             # self, since that's more informative.
