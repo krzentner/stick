@@ -74,10 +74,15 @@ def flatten(src: Any, prefix: str, dst: FlatDict):
             key = f"{prefix}_{i}"
             i += 1
         dst[key] = src
-    elif isinstance(src, dict) and (len(src) <= MAX_SEQ_LEN or not prefix):
+    elif isinstance(src, dict):
         for k, v in src.items():
             if isinstance(k, int):
                 continue
+            # Since we often log locals, there's likely a `self` variable.
+            # Replace the `self` key with the type name of the self, since
+            # that's more informative.
+            if k == "self":
+                k = type(v).__name__
             try:
                 if prefix:
                     flat_k = f"{prefix}/{k}"

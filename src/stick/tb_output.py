@@ -1,18 +1,14 @@
+import logging
+
 from stick import OutputEngine, declare_output_engine, INFO
 from stick.utils import warn_internal
 
 SummaryWriter = None
 
-DEFAULT_LOG_LEVEL = INFO
-
 
 @declare_output_engine
 class TensorBoardOutput(OutputEngine):
-    def __init__(self, log_dir, run_name, flush_secs=120, log_level=None):
-        # Allow default to be overridden
-        # TODO: Find a better API for this.
-        if log_level is None:
-            log_level = DEFAULT_LOG_LEVEL
+    def __init__(self, log_dir, run_name, flush_secs=120, log_level=INFO, log_hparams=False):
         super().__init__(log_level=log_level)
         global SummaryWriter
         try:
@@ -38,12 +34,13 @@ class TensorBoardOutput(OutputEngine):
 
         self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
         self.run_name = run_name
-        print(
-            f"TensorBoardOutput(level={self.log_level!r}) in: " f"{log_dir}/{run_name}"
+        self.log_hparams = log_hparams
+        logging.getLogger('stick').info(
+            f"TensorBoardOutput logging at level {self.log_level}"
         )
 
     def log_row_inner(self, row):
-        if row.table_name == "hparams":
+        if row.table_name == "hparams" and self.log_hparams:
             flat_dict = row.as_flat_dict()
             hparams = {
                 k: v for (k, v) in flat_dict.items() if not k.startswith("metric")

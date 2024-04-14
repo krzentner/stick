@@ -113,7 +113,7 @@ def setup_py_logging(run_dir, stderr_log_level=WARNING):
     warnings_logger.addHandler(file_handler)
 
 
-def init(log_dir="runs", run_name=None, stderr_log_level=WARNING) -> str:
+def init(log_dir="runs", run_name=None, stderr_log_level=WARNING, tb_log_level=INFO, tb_log_hparams=False) -> str:
     """Initializes a logger in {log_dir}/{run_name} with default backends.
 
     Run name will default to the main file and current time in ISO 8601 format.
@@ -140,7 +140,21 @@ def init(log_dir="runs", run_name=None, stderr_log_level=WARNING) -> str:
 
     if LOGGER_STACK:
         warn_internal("logger was already present before stick.init() was called")
-    LOGGER_STACK.append(setup_default_logger(log_dir, run_name))
+    from stick.ndjson_output import NDJsonOutputEngine
+    from stick.csv_output import CSVOutputEngine
+    from stick.pprint_output import PPrintOutputEngine
+    from stick.tb_output import TensorBoardOutput
+
+    logger = Logger(log_dir=log_dir, run_name=run_name)
+    logger.add_output(NDJsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
+    logger.add_output(CSVOutputEngine(log_dir, run_name))
+    try:
+        logger.add_output(TensorBoardOutput(log_dir, run_name, log_level=tb_log_level, log_hparams=tb_log_hparams))
+    except ImportError:
+        warn_internal("tensorboard API not installed")
+    logger.add_output(PPrintOutputEngine(f"{log_dir}/{run_name}/stick.log"))
+
+    LOGGER_STACK.append(logger)
     return run_dir
 
 
@@ -156,8 +170,12 @@ def init_extra(
     seed_all="if_present",
     create_git_checkpoint=True,
     stderr_log_level=WARNING,
+    tb_log_level=INFO,
+    tb_log_hparams=False,
 ) -> str:
-    run_dir = init(log_dir, run_name, stderr_log_level)
+    run_dir = init(log_dir, run_name, stderr_log_level, tb_log_level, tb_log_hparams)
+    logging.getLogger('stick').log(level=int(RESULTS),
+                                   msg=f"Logging to: {run_dir}")
     global INIT_EXTRA_CALLED
     if INIT_EXTRA_CALLED:
         return run_dir
@@ -378,25 +396,6 @@ def declare_output_engine(output_engine_type):
     return output_engine_type
 
 
-def setup_default_logger(log_dir, run_name):
-    assert INIT_CALLED, "Call init() instead"
-
-    from stick.ndjson_output import NDJsonOutputEngine
-    from stick.csv_output import CSVOutputEngine
-    from stick.pprint_output import PPrintOutputEngine
-    from stick.tb_output import TensorBoardOutput
-
-    logger = Logger(log_dir=log_dir, run_name=run_name)
-    logger.add_output(NDJsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
-    logger.add_output(CSVOutputEngine(log_dir, run_name))
-    try:
-        logger.add_output(TensorBoardOutput(log_dir, run_name))
-    except ImportError:
-        warn_internal("tensorboard API not installed")
-    logger.add_output(PPrintOutputEngine(f"{log_dir}/{run_name}/stick.log"))
-    return logger
-
-
 def load_log_file(
     filename: str, keys: Optional[list[str]] = None
 ) -> dict[str, list[ScalarTypes]]:
@@ -515,14 +514,6 @@ def log(
             row = frame_info.frame.f_locals
             if level is None:
                 level = INFO
-            # Since we're inferring the row from the locals, there's likely a
-            # `self` variable. Replace the `self` key with the type name of the
-            # self, since that's more informative.
-            if "self" in row:
-                type_name = type(row["self"]).__name__
-                if type_name not in row:
-                    row[type_name] = row["self"]
-                    del row["self"]
         if level is None:
             level = INFO
         logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
