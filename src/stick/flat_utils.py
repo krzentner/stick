@@ -92,7 +92,7 @@ def flatten(src: Any, prefix: str, dst: FlatDict):
                 pass
             else:
                 flatten(v, flat_k, dst)
-    elif isinstance(src, (list, tuple)) and len(src) <= MAX_SEQ_LEN:
+    elif isinstance(src, (list, tuple)):
         for i, v in enumerate(src):
             flat_k = f"{prefix}[{i}]"
             flatten(v, prefix, dst)
