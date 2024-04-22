@@ -36,4 +36,6 @@ def process_module(module, key, dst):
 
 @declare_processor("torch.optim.Optimizer")
 def process_optimizer(optimizer, key, dst):
-    flatten(optimizer.state_dict(), key, dst)
+    state = optimizer.state_dict()
+    del state['param_groups']
+    flatten(state, key, dst)
