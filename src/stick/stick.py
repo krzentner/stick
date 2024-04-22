@@ -166,7 +166,7 @@ def init_extra(
     run_name=None,
     config=None,
     wandb_kwargs=None,
-    init_wandb=True,
+    init_wandb=False,
     seed_all="if_present",
     create_git_checkpoint=True,
     stderr_log_level=WARNING,

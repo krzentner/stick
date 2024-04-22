@@ -1,9 +1,9 @@
 [project]
 name = "stick"
 version = "0.1.0-dev"
-description = "Log Everything. Log Easily."
+description = "Log first, ask questions later."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 license = {file = "LICENSE"}
 authors = [
   {name = "K.R. Zentner", email = "krzentner@gmail.com" }
@@ -19,7 +19,6 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
 
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.7",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -66,7 +65,7 @@ build-backend = "setuptools.build_meta"
 
 # Below is poetry setup for developing this package
 [tool.poetry.dependencies]
-python = "^3.7,<4.0"
+python = "^3.8,<4.0"
 
 [tool.pyright]
 include = ["src"]
