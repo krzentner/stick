@@ -7,9 +7,14 @@ from stick import OutputEngine, declare_output_engine
 
 @declare_output_engine
 class PPrintOutputEngine(OutputEngine):
+    """OutputEngine that pprints all tables to one stream.
+
+    Mostly used for high-priority logging to stdout.
+    """
+
     def __init__(
         self,
-        file: stick._utils.FileIsh = None,
+        file: stick.FileIsh = None,
         flatten: bool = True,
         log_level=stick.RESULTS,
     ):

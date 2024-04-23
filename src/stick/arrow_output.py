@@ -16,9 +16,18 @@ DEFAULT_FILETYPES = [".csv", ".parquet"]
 
 @stick.declare_output_engine
 class ArrowOutputEngine(stick.OutputEngine):
+    """OutputEngine using pyarrow to write to parquet (and
+    optinally csv) files.
+    Probably the fastest output engine, although a significant
+    portion of stick runtime is spent in summarization.
+
+    Does not currently support tables changing keys during
+    logging.
+    """
+
     def __init__(
         self,
-        runs_dir: stick._utils.FileIsh,
+        runs_dir: stick.FileIsh,
         run_name: str,
         filetypes=DEFAULT_FILETYPES,
         log_level=stick.TRACE,

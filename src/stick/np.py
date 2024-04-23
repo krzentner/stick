@@ -10,7 +10,7 @@ except ImportError as ex:
 
 
 @declare_summarizer("numpy.ndarray")
-def summarize_tensor(array, key, dst):
+def summarize_array(array, key, dst):
     if array.flatten().shape == (1,):
         dst[key] = array.flatten()[0]
     else:

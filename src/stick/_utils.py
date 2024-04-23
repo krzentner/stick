@@ -1,15 +1,12 @@
-from io import TextIOWrapper
 from pathlib import Path
-from typing import Union
 import os
 import sys
 import logging
 
-PathIsh = Union[str, bytes, Path]
-FileIsh = Union[None, PathIsh, TextIOWrapper]
+import stick
 
 
-def splitall(path: PathIsh) -> list[str]:
+def splitall(path: "stick.PathIsh") -> list[str]:
     """Split a path into the drive (on windows), the directories, and the file
     in one list."""
     # Files, dirs, or drives
@@ -26,7 +23,7 @@ def splitall(path: PathIsh) -> list[str]:
 
 
 class FileManager:
-    def __init__(self, file: FileIsh = None):
+    def __init__(self, file: "stick.FileIsh" = None):
         self.should_close = False
         self.filename = file
         if file is None:

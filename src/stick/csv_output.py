@@ -1,5 +1,4 @@
 import datetime
-import re
 import os
 from typing import Optional, Union
 import csv
@@ -12,9 +11,14 @@ from stick._utils import FileManager, warn_internal
 
 @stick.declare_output_engine
 class CSVOutputEngine(stick.OutputEngine):
+    """OutputEngine using the standard library csv module.
+
+    Can handle inconsistent rows by rewriting the CSV file.
+    """
+
     def __init__(
         self,
-        runs_dir: stick._utils.FileIsh,
+        runs_dir: stick.FileIsh,
         run_name: str,
         log_level=stick.TRACE,
     ):

@@ -58,15 +58,20 @@ If you want to be able to exactly recover a value passed to stick, format it to 
 For built-in datatypes (dictionaries, lists, tuples), preprocessing runs recursively.
 For commonly used numerical libraries (numpy, pytorch), there are adapter modules to summarize common datatypes.
 
-If you want your type to be flattened, you can define a method `stick_summarize`. Example:
+If you want your type to be flattened, you can define a custom summarizer. The standard way to do this is to use `declare_summarizer`, which can be used without modifying the source for the particular type being summarized.
+
+Example of summarizing a custom type "MyPoint":
 
 ```python
-from stick.summarize import summarize, ScalarTypes
+from stick.summarize import declare_summarizer, summarize, ScalarTypes
 
-    def stick_summarize(self, prefix: str, dst: dict[str, ScalarTypes]):
-        summarize(self.subfield, f"{prefix}.subfield", dst)
-        dst[f"{prefix}.y"] = self.y
-        dst[f"{prefix}.x"] = self.x
+@declare_summarizer("MyPoint"):
+def summarize_mypoint(point, prefix: str, dst: dict[str, ScalarTypes]):
+    # Include x and y fields directly
+    dst[f"{prefix}.x"] = point.x
+    dst[f"{prefix}.y"] = point.y
+    # Recursively summarize metadata
+    summarize(point.metadata, f"{prefix}.metadata", dst)
 ```
 
 Sometimes you may have local variables that don't make sense to log in stick (e.g. long lists).

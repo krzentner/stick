@@ -8,18 +8,20 @@ from stat import S_ISREG
 import git
 
 EIGHT_MEBIBYTES = 8 * 2**20
-STICK_CHECKPOINTS_BRANCH = "stick-checkpoints"
 
 
 def checkpoint_repo(
-    run_dir: str, launcher_path: Optional[str] = None
+    run_dir: str,
+    launcher_path: Optional[str] = None,
+    checkpoint_branch: str = "stick-checkpoints",
+    maximum_filesize: int = EIGHT_MEBIBYTES,
 ) -> dict[str, Any]:
-    """Find the git repo, starting from __main__ or launcher_path (if
+    """Find the git repo, starting from `__main__` or launcher_path (if
     provided), and create a new git commit on the stick-checkpoints branch.
 
-    Also writes out run_dir/from_head.diff and
-    run_dir/from_last_checkpoint.diff, for easily visualizing changes present
-    in this experiment launch.
+    Also writes out `{run_dir}/from_head.diff` and
+    `{run_dir}/from_last_checkpoint.diff`, for easily visualizing
+    changes present in this experiment launch.
 
     Returns a dictionary of metadata, which will be empty on failure.
     """
@@ -29,10 +31,10 @@ def checkpoint_repo(
         warnings.warn("Could not find git root path. " "Code will not be checkpointed.")
         return {}
     repo = git.Repo(git_root_path)
-    if STICK_CHECKPOINTS_BRANCH in repo.heads:
-        checkpoint_branch = repo.heads[STICK_CHECKPOINTS_BRANCH]
+    if checkpoint_branch in repo.heads:
+        branch = repo.heads[checkpoint_branch]
     else:
-        checkpoint_branch = repo.create_head(STICK_CHECKPOINTS_BRANCH)
+        branch = repo.create_head(checkpoint_branch)
     with tempfile.TemporaryDirectory() as tmp_dir:
         # Ask gitpython to create an index for us in this temporary directory.
         index_path = os.path.join(tmp_dir, "stick_git_index")
@@ -41,18 +43,18 @@ def checkpoint_repo(
         # using gitpython.
         # Is this really better than just moving the index file and calling
         # `git add -a`?
-        for f in get_modified_file_list(git_root_path):
+        for f in get_modified_file_list(git_root_path, maximum_filesize):
             index_file.add(f)
         checkpoint_commit = index_file.commit(
             f"stick checkpoint of {run_dir}",
-            [checkpoint_branch.commit],
+            [branch.commit],
             head=False,
             skip_hooks=True,
         )
-        checkpoint_branch.reference = checkpoint_commit
+        branch.reference = checkpoint_commit
         print(
             f"Saved code to git commit f{checkpoint_commit.hexsha} on "
-            f"branch {STICK_CHECKPOINTS_BRANCH}"
+            f"branch {checkpoint_branch}"
         )
         git_hash = checkpoint_commit.hexsha
         subprocess.run(
@@ -71,7 +73,7 @@ def checkpoint_repo(
             (
                 "git",
                 "diff",
-                f"{STICK_CHECKPOINTS_BRANCH}~1",
+                f"{checkpoint_branch}~1",
                 checkpoint_commit.hexsha,
                 "--histogram",
                 "--output",
@@ -86,6 +88,9 @@ def checkpoint_repo(
 
 
 def get_git_root(start_path: Optional[str] = None) -> Optional[str]:
+    """Find first git repo root directory above `start_path` (or
+    cwd if not provided).
+    """
     if start_path is None:
         import __main__ as main
 
@@ -106,10 +111,11 @@ def get_git_root(start_path: Optional[str] = None) -> Optional[str]:
     return git_root_path.decode()
 
 
-def get_modified_file_list(git_root_path: str) -> list[str]:
-    # List all non-excluded files
-    # This is basically all files listed by `git status`, but separated by nul
-    # characters.
+def get_modified_file_list(git_root_path: str, maximum_filesize: int) -> list[str]:
+    """List all non-excluded files of at most a given filesize.
+    This is basically all files listed by `git status`.
+    """
+    # Get non-excluded files separated by nul characters.
     git_files = subprocess.check_output(
         ("git", "ls-files", "--exclude-standard", "--cached", "--others", "-z"),
         cwd=git_root_path,
@@ -124,11 +130,11 @@ def get_modified_file_list(git_root_path: str) -> list[str]:
             file_stats = os.stat(f)
             file_size = file_stats.st_size
             repo_size += file_size
-            if file_size < EIGHT_MEBIBYTES and S_ISREG(file_stats.st_mode):
+            if file_size < maximum_filesize and S_ISREG(file_stats.st_mode):
                 files_to_archive.append(f)
         except FileNotFoundError:
             pass
-    if repo_size >= EIGHT_MEBIBYTES:
+    if repo_size >= maximum_filesize:
         warnings.warn(
             "Checkpointing over 8MiB of files. This may be "
             "slow. Set create_git_checkpoint=False in init_extra "

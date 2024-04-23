@@ -1,13 +1,18 @@
+"""
+.. include:: ../../README.md
+"""
 import os
 import sys
+import io
 import inspect
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Union, Optional
+from typing import Any, Callable, Literal, Union, Optional
 import functools
 import datetime
 import logging
 import enum
+import pathlib
 
 import stick
 from stick.summarize import summarize, Summary, ScalarTypes
@@ -22,35 +27,36 @@ def log_row(
 ):
     """Primary logging entrypoint.
 
-    Shorthand for calling `stick.get_logger()`.`.log_row(row)`.
     Will deduce any non-provided arguments.
 
-    If a Row object is provided, it contains all required fields and will be
-    passed to log_row, with arguments overriding the row fields if provided.
+    If a `Row` object is provided, it contains all required fields
+    and will be passed to `Logger.log_row`, with arguments
+    overriding the row fields if provided.
 
     If the first argument is a str, it becomes the table name.
-    If the first argument is a dict, the table name is derived from the calling
-    file and line number.
+    If the first argument is not a str or `Row`, the table name is
+    derived from the calling file and line number.
 
     If the row is not provided, locals from the calling function will be
-    logged, and the log_level will be set to TRACE (log level 5).
-    In other cases, level defaults to INFO (log level 10), which is also the
+    logged.
+
+    `log_level` defaults to `INFO` (log level 10), which is also the
     default value for most output engines.
 
-    Step determines the "X axis" of the logged data. If not provided it will
+    `step` determines the "X axis" of the logged data. If not provided it will
     automatically be incremented every call with the same table.
 
-    If stick.init() or stick.init_extra() has not been called
-    before this function, stick.init() will be called with no
+    If `init()` or `init_extra()` has not been called
+    before this function, `init()` will be called with no
     arguments
 
     Examples:
 
-    ```
-    # Will log all local variables at log level TRACE
+    ```python
+    # Will log all local variables at log level INFO
     log_row()
 
-    # Will log all local variables at log level TRACE to table called 'grad_step'
+    # Will log all local variables at log level INFO to table called 'grad_step'
     log_row('grad_step')
 
     # Will log into table based on current file and line number at log level INFO
@@ -77,8 +83,7 @@ def log_row(
         assert isinstance(table, str)
     if row is not None and not isinstance(row, (dict, Row)):
         raise ValueError(
-            f"Unsupported row type {type(row)}. "
-            "Use a dictionary or inherit from stick.Row."
+            f"Unsupported row type {type(row)}. " "Use a dictionary or stick.Row."
         )
     if step is not None:
         assert isinstance(step, int)
@@ -147,7 +152,10 @@ def load_log_file(
             "types (.ndjson or .csv)"
         )
 
-LOAD_FILETYPES: dict[str, Callable[[str, Optional[list[str]]], dict[str, list[ScalarTypes]]]] = {}
+
+LOAD_FILETYPES: dict[
+    str, Callable[[str, Optional[list[str]]], dict[str, list[ScalarTypes]]]
+] = {}
 """Functions for loading different filetypes.
 
 Maps from extension (with a leading ".") to a function with the same API as load_log_file().
@@ -158,12 +166,14 @@ _INIT_CALLED = False
 LOG_LEVELS = {}
 """Contains all log levels created with NamedLevel.register."""
 
+
 @dataclass(eq=False, order=False, frozen=True)
 @functools.total_ordering
 class NamedLevel:
     """A way of naming a log level without adding it to the
     LogLevels enum.
     """
+
     name: str
     val: int
 
@@ -198,10 +208,15 @@ class NamedLevel:
 class LogLevels(enum.Enum):
     """An enum of named log levels."""
 
-    # Used for extremely noisy logging (maybe still useful for debugging)
     TRACE = NamedLevel.register("TRACE", 5)
-    # Used for important results (not an error, but less noisy than INFO)
+    """Used for extremely noisy logging when doing detailed
+    debugging.
+    """
+
     RESULTS = NamedLevel.register("RESULTS", 35)
+    """Log level for important results. Usually the appropriate
+    logging level to print to stdout.
+    """
 
     # These have the same value as the standard library logging levels
     DEBUG = NamedLevel.register("DEBUG", 10)
@@ -225,9 +240,20 @@ WARNING: LogLevels = LogLevels.WARNING
 ERROR: LogLevels = LogLevels.ERROR
 CRITICAL: LogLevels = LogLevels.CRITICAL
 
+LogLevelIsh = Union[int, NamedLevel, LogLevels]
+PathIsh = Union[str, bytes, pathlib.Path]
+FileIsh = Union[None, PathIsh, io.TextIOWrapper]
 
-def init(runs_dir="runs", run_name=None, stderr_log_level=WARNING, tb_log_level=INFO, tb_log_hparams=False) -> str:
-    """Initializes a logger in {runs_dir}/{run_name} with default backends.
+
+def init(
+    runs_dir: str = "runs",
+    run_name: Optional[str] = None,
+    stderr_log_level: LogLevelIsh = WARNING,
+    tb_log_level: LogLevelIsh = INFO,
+    tb_log_hparams: bool = False,
+    setup_py_logging: bool = True,
+) -> str:
+    """Initializes a logger in `{runs_dir}/{run_name}` with default backends.
 
     Run name will default to the main file and current time in ISO 8601 format.
     """
@@ -241,7 +267,8 @@ def init(runs_dir="runs", run_name=None, stderr_log_level=WARNING, tb_log_level=
             )
 
     run_dir = os.path.abspath(os.path.join(runs_dir, run_name))
-    _setup_py_logging(run_dir, stderr_log_level)
+    if setup_py_logging:
+        _setup_py_logging(run_dir, stderr_log_level)
 
     global _INIT_CALLED
     if _INIT_CALLED:
@@ -263,14 +290,20 @@ def init(runs_dir="runs", run_name=None, stderr_log_level=WARNING, tb_log_level=
     logger.add_output(NDJsonOutputEngine(f"{runs_dir}/{run_name}/stick.ndjson"))
     logger.add_output(CSVOutputEngine(runs_dir, run_name))
     try:
-        logger.add_output(TensorBoardOutput(runs_dir, run_name, log_level=tb_log_level, log_hparams=tb_log_hparams))
+        logger.add_output(
+            TensorBoardOutput(
+                runs_dir, run_name, log_level=tb_log_level, log_hparams=tb_log_hparams
+            )
+        )
     except ImportError:
         warn_internal("tensorboard API not installed")
     logger.add_output(PPrintOutputEngine(f"{runs_dir}/{run_name}/stick.log"))
 
     if "torch" in sys.modules:
+        # Imported for side effects
         import stick.torch
     if "numpy" in sys.modules:
+        # Imported for side effects
         import stick.np
 
     _LOGGER = logger
@@ -281,27 +314,38 @@ _INIT_EXTRA_CALLED = False
 
 
 def init_extra(
-    runs_dir="runs",
-    run_name=None,
-    config=None,
-    wandb_kwargs=None,
-    init_wandb=False,
-    seed_all="if_present",
-    create_git_checkpoint=True,
-    stderr_log_level=WARNING,
-    tb_log_level=INFO,
-    tb_log_hparams=False,
+    runs_dir: str = "runs",
+    run_name: Optional[str] = None,
+    config: dict[str, Any] = None,
+    wandb_kwargs: Optional[dict[str, Any]] = None,
+    init_wandb: bool = False,
+    seed_all: Union[bool, Literal["if_present"]] = "if_present",
+    create_git_checkpoint: bool = True,
+    stderr_log_level: LogLevelIsh = WARNING,
+    tb_log_level: LogLevelIsh = INFO,
+    tb_log_hparams: bool = False,
 ) -> str:
-    """Initializes a logger in {runs_dir}/{run_name} with default backends.
+    """Initializes a logger in `{runs_dir}/{run_name}` with default backends.
 
     Run name will default to the main file and current time in ISO 8601 format.
 
     Initializes stick logging, including all optional
     features.
+
+    `config` should be configuration / hyperparameter options. They
+    will be logged to wandb if `init_wandb` is True, and logged to
+    tensorboard if `tb_log_hparams` is True.
+
+    `seed_all`: If True of "if_present", will seed all libraries
+    using `config['seed']`. If you would like to seed manually
+    with another value, you can call `stick.seed_all_imported_modules()`
+
+    If `create_git_checkpoint` is True, creates a git commit on a
+    branch named `stick-checkpoints`, and generates diffs using
+    that commit using `stick.stick_git.checkpoint_repo()`.
     """
     run_dir = init(runs_dir, run_name, stderr_log_level, tb_log_level, tb_log_hparams)
-    logging.getLogger('stick').log(level=int(RESULTS),
-                                   msg=f"Logging to: {run_dir}")
+    logging.getLogger("stick").log(level=int(RESULTS), msg=f"Logging to: {run_dir}")
     global _INIT_EXTRA_CALLED
     if _INIT_EXTRA_CALLED:
         return run_dir
@@ -366,7 +410,7 @@ def _default_run_name():
     return f"{file_trail}_{now}"
 
 
-def _setup_py_logging(run_dir, stderr_log_level=WARNING):
+def _setup_py_logging(run_dir, stderr_log_level: LogLevelIsh = WARNING):
     os.makedirs(run_dir, exist_ok=True)
     FORMAT = "%(asctime)s %(name)s [%(levelname)-8.8s]: %(message)s"
     rootLogger = logging.getLogger()
@@ -437,13 +481,6 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
 
 
 _LOGGER = None
-# Should we even use this? The original idea was to have a stack
-# for pushing hierarchical context to, as used in dowel.
-# However, I've mostly been using stick by recursively passing
-# local variable dictionaries up the stack.
-# Theoretically we could add an API for building up a row across
-# multiple levels of a call stack, but this would be within one
-# logger.
 
 
 def get_logger() -> "Logger":
@@ -466,18 +503,34 @@ def add_output(output_engine):
 
 @dataclass
 class Row:
+    """A row of data. The fundamental unit of logging in stick."""
+
     table_name: str
+    """The name of the table this row should be logged to."""
+
     raw: Any
+    """The raw data to log. Will be summarized before logging."""
 
     # "Should" be monotonically increasing, but not necessarily sequential
     step: int
+    """A (usually monotonically increasing) step.
+
+    Sets the "default x-axis" in plotting.
+    """
 
     # If someone is manually creating a Row, probably default to INFO (the
     # default logging level)
-    log_level: int = int(INFO)
+    log_level: LogLevelIsh = INFO
+    """Log level to log at."""
 
     def as_summary(self) -> Summary:
-        summarized = getattr(self, 'summarized', None)
+        """Convert the row to a Summary.
+
+        Cached, but only computed if this method is called.
+        This avoid the overhead of summarizing if no OutputEngine
+        is listening on this log level.
+        """
+        summarized = getattr(self, "summarized", None)
         if summarized is None:
             summarized = {}
             summarize(self.raw, "", summarized)
@@ -487,6 +540,12 @@ class Row:
 
 
 class Logger:
+    """Main container of stick state.
+
+    Conains all instantiated OutputEngines, as well as stateful
+    table default values (step, name of tables based on callsite).
+    """
+
     def __init__(self, runs_dir, run_name):
         self.runs_dir = runs_dir
         self.run_name = run_name
@@ -503,6 +562,10 @@ class Logger:
         ]
 
     def get_unique_table(self, filename: str, lineno: int) -> str:
+        """Get a unique table name given the filename and line
+        number. Used when no table name is provided to
+        stick.log_row().
+        """
         fileloc = (filename, lineno)
         try:
             return self.fileloc_to_tables[fileloc]
@@ -527,15 +590,27 @@ class Logger:
         return step
 
     def log_row(self, row: Row) -> bool:
+        """Logs a row to all `OutputEngine`s (will filter on log
+        level).
+
+        Convenience features (like default table name, and logging
+        a dictionary) are only available via stick.log_row().
+
+        Returns:
+
+            true if any output engine logged the table.
+        """
         logged_anywhere = False
         for output in self.all_output_engines:
             logged_anywhere |= output.log_row(row)
         if not logged_anywhere:
             warn_internal(
-                f"Log to table {row.table_name!r} was too low level for any logger output.")
+                f"Log to table {row.table_name!r} was too low level for any logger output."
+            )
         return logged_anywhere
 
     def close(self):
+        """Close all `OutputEngine`s."""
         assert not self._closed
         for output in self.all_output_engines:
             output.close()
@@ -552,11 +627,12 @@ class OutputEngine:
     any subclasses you create.
     """
 
-    def __init__(self, log_level):
-        self.log_level = log_level
+    def __init__(self, log_level: LogLevelIsh):
+        self.log_level: LogLevelIsh = log_level
 
     def log_row(self, row: Row):
         """External method to call to log a row."""
+        # This int() conversion is important!
         if int(row.log_level) >= int(self.log_level):
             self.log_row_inner(row)
             return True

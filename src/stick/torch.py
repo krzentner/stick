@@ -37,5 +37,5 @@ def summarize_module(module, key, dst):
 @declare_summarizer("torch.optim.Optimizer")
 def summarize_optimizer(optimizer, key, dst):
     state = optimizer.state_dict()
-    del state['param_groups']
+    del state["param_groups"]
     flatten(state, key, dst)

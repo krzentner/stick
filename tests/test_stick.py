@@ -1,6 +1,7 @@
 import stick
 from stick import Logger, log_row
 
+
 def test_log_pprint(tmp_path):
     from stick.pprint_output import PPrintOutputEngine
     import io

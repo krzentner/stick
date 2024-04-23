@@ -13,12 +13,28 @@ from stick.summarize import ScalarTypes, is_instance_str
 
 @stick.declare_output_engine
 class NDJsonOutputEngine(stick.OutputEngine):
+    """OutputEngine that outputs all tables to one file as json
+    objects separated by newlines.
+    Uses the standard library json module.
+
+    The first OutputEngine to be implemented :).
+    """
+
     def __init__(
         self,
-        file: stick._utils.FileIsh = None,
+        file: stick.FileIsh = None,
         summarize: bool = True,
-        log_level=stick.TRACE,
+        log_level: stick.LogLevelIsh = stick.TRACE,
     ):
+        """
+        Args:
+
+            file (FileIsh): File to log to.
+            summarize (bool): If false, does not use stick
+                summarization, and instead logs the raw row with a
+                bespoke, lossy JSONEncoder.
+            log_level (LogLevelIsh): log level to listen to.
+        """
         super().__init__(log_level=log_level)
         self.fm = stick._utils.FileManager(file)
         self.summarize = summarize
