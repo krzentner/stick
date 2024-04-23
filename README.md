@@ -1,5 +1,7 @@
 # stick
 
+[\[api reference\]](https://krzentner.github.io/stick/)
+
 Log first, ask questions later.
 
 Stick is a numerical logging library designed for logging as many variables at once on as many timescales as possible.

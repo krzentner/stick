@@ -2,3 +2,4 @@ __pycache__
 stick.egg-info
 /stick.ndjson
 /runs
+/docs_build
