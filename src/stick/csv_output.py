@@ -5,7 +5,7 @@ import csv
 import time
 
 import stick
-from stick.summarize import ScalarTypes
+from stick import ScalarTypes
 from stick._utils import FileManager, warn_internal
 
 

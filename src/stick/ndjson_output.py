@@ -8,7 +8,7 @@ import datetime
 
 import stick
 from stick._utils import warn_internal
-from stick.summarize import ScalarTypes, is_instance_str
+from stick import ScalarTypes, is_instance_str
 
 
 @stick.declare_output_engine

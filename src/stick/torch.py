@@ -1,5 +1,5 @@
 """Enhances stick.flatten to handle common torch types."""
-from stick.summarize import summarize, declare_summarizer
+from stick import summarize, declare_summarizer
 from stick._utils import warn_internal
 
 try:

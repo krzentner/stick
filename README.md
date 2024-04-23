@@ -24,8 +24,9 @@ so depend on a specific version.
 The current recommended install method is:
 
 ```
-pip install "git+https://github.com/krzentner/stick.git@v0.1.0[recommended]"
+pip install "git+https://github.com/krzentner/stick.git@v0.1.0#egg=stick[recommended]"
 ```
+
 
 ## Key Idea
 
@@ -63,9 +64,9 @@ If you want your type to be flattened, you can define a custom summarizer. The s
 Example of summarizing a custom type "MyPoint":
 
 ```python
-from stick.summarize import declare_summarizer, summarize, ScalarTypes
+from stick import declare_summarizer, summarize, ScalarTypes
 
-@declare_summarizer("MyPoint"):
+@declare_summarizer(MyPoint):
 def summarize_mypoint(point, prefix: str, dst: dict[str, ScalarTypes]):
     # Include x and y fields directly
     dst[f"{prefix}.x"] = point.x

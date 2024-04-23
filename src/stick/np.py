@@ -1,5 +1,5 @@
 """Enhances stick.flatten to handle numpy arrays."""
-from stick.summarize import declare_summarizer
+from stick import declare_summarizer
 from stick._utils import warn_internal
 
 try:

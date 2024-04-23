@@ -103,7 +103,7 @@ class ArrowOutputEngine(stick.OutputEngine):
 
 def load_parquet_file(
     filename: str, keys: Optional[list[str]]
-) -> dict[str, list[stick.summarize.ScalarTypes]]:
+) -> dict[str, list[stick.ScalarTypes]]:
     table = pa.parquet.read_table(filename, columns=keys)
     return table.to_pydict()
 
@@ -113,7 +113,7 @@ stick.LOAD_FILETYPES[".parquet"] = load_parquet_file
 
 def load_csv_file(
     filename: str, keys: Optional[list[str]]
-) -> dict[str, list[stick.summarize.ScalarTypes]]:
+) -> dict[str, list[stick.ScalarTypes]]:
     table = pa.csv.read_csv(
         filename, read_options=pa.csv.ReadOptions(column_names=keys)
     )
