@@ -24,7 +24,7 @@ so depend on a specific version.
 The current recommended install method is:
 
 ```
-pip install git+https://github.com/krzentner/stick.git@v0.1.0[recommended]
+pip install "git+https://github.com/krzentner/stick.git@v0.1.0[recommended]"
 ```
 
 ## Key Idea
