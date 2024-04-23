@@ -1,17 +1,18 @@
 """Handles converting raw data to flattened dictionaries for logging."""
 import sys
 import fnmatch
-from typing import Any, Union
+from typing import Any, Callable, Union
 
 from stick._utils import warn_internal
 
-STICK_SUMMARIZE = "stick_summarize"
+# Keep these this list and type synchronized
+ScalarTypeTuple = (type(None), str, float, int, bool)
+ScalarTypes = Union[type(None), str, float, int, bool]
+Summary = dict[str, Union[None, str, float, int, bool]]
 
-SKIP = object()
+SUMMARIZERS: dict[str, Callable[[Any, str, Summary], None]] = {}
 
-SUMMARIZERS = {}
-
-MAX_SEQ_LEN = 8
+_STICK_SUMMARIZE = "stick_summarize"
 
 
 def declare_summarizer(type_description: Union[str, type], monkey_patch: bool = True):
@@ -25,13 +26,13 @@ def declare_summarizer(type_description: Union[str, type], monkey_patch: bool = 
         SUMMARIZERS[type_str] = processor
 
         if monkey_patch:
-            # Try to monkey-patch STICK_SUMMARIZE method onto type
+            # Try to monkey-patch _STICK_SUMMARIZE method onto type
             parts = type_str.split(".")
             try:
                 obj = sys.modules[parts[0]]
                 for p in parts[1:]:
                     obj = getattr(obj, p, None)
-                setattr(obj, STICK_SUMMARIZE, processor)
+                setattr(obj, _STICK_SUMMARIZE, processor)
             except (KeyError, AttributeError, TypeError) as ex:
                 warn_internal(
                     f"Coudld not money-patch processor to type {type_str!r}: {ex}"
@@ -58,16 +59,11 @@ def is_instance_str(obj, type_names):
         return False
 
 
-# Keep these this list and type synchronized
-ScalarTypes = (type(None), str, float, int, bool)
-Summary = dict[str, Union[None, str, float, int, bool]]
-
-
 def summarize(src: Any, prefix: str, dst: Summary):
     """Lossfully summarize a value."""
     if prefix == "_":
         return
-    if isinstance(src, ScalarTypes):
+    if isinstance(src, ScalarTypeTuple):
         key = prefix
         i = 1
         while key in dst:
@@ -101,6 +97,6 @@ def summarize(src: Any, prefix: str, dst: Summary):
         if processor is not None:
             processor(src, prefix, dst)
         else:
-            processor = getattr(src, STICK_SUMMARIZE, None)
+            processor = getattr(src, _STICK_SUMMARIZE, None)
             if processor is not None:
                 processor(prefix, dst)

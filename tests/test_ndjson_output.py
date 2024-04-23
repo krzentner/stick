@@ -1,7 +1,7 @@
 import stick
 from stick.ndjson_output import NDJsonOutputEngine
 
-stick.setup_py_logging("runs/stick_tests")
+stick._setup_py_logging("runs/stick_tests")
 
 
 def test_round_trip(tmp_path):

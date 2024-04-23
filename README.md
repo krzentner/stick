@@ -8,7 +8,7 @@ The prototypical use case for stick is the following:
 
 ```python
 loss.backward()
-stick.log("grad_step", locals(), level=stick.TRACE)
+stick.log_row("grad_step", locals(), level=stick.TRACE)
 optimizer.step()
 ```
 
@@ -75,7 +75,7 @@ In that case the recommended pattern is:
 ```python
 row = locals()
 del row["my_long_list"]
-stick.log("my_locals", row)
+stick.log_row("my_locals", row)
 ```
 
 ## Extra Utilities

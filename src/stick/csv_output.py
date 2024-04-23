@@ -14,12 +14,12 @@ from stick._utils import FileManager, warn_internal
 class CSVOutputEngine(stick.OutputEngine):
     def __init__(
         self,
-        log_dir: stick._utils.FileIsh,
+        runs_dir: stick._utils.FileIsh,
         run_name: str,
         log_level=stick.TRACE,
     ):
         super().__init__(log_level=log_level)
-        self.log_dir = os.path.abspath(log_dir)
+        self.runs_dir = os.path.abspath(runs_dir)
         self.run_name = run_name
         self.writers = {}
 
@@ -36,7 +36,7 @@ class CSVOutputEngine(stick.OutputEngine):
         if row.table_name in self.writers:
             f, writer = self.writers[row.table_name]
         else:
-            f_name = os.path.join(self.log_dir, self.run_name, f"{row.table_name}.csv")
+            f_name = os.path.join(self.runs_dir, self.run_name, f"{row.table_name}.csv")
             f = FileManager(f_name)
             f.should_close = True
             writer = csv.DictWriter(f.file, fieldnames=sorted(msg.keys()))

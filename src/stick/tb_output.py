@@ -8,7 +8,7 @@ SummaryWriter = None
 
 @declare_output_engine
 class TensorBoardOutput(OutputEngine):
-    def __init__(self, log_dir, run_name, flush_secs=120, log_level=INFO, log_hparams=False):
+    def __init__(self, runs_dir, run_name, flush_secs=120, log_level=INFO, log_hparams=False):
         super().__init__(log_level=log_level)
         global SummaryWriter
         try:
@@ -32,7 +32,7 @@ class TensorBoardOutput(OutputEngine):
         if SummaryWriter is None:
             raise ImportError("Could not find tensorboard API")
 
-        self.writer = SummaryWriter(f"{log_dir}/{run_name}", flush_secs=flush_secs)
+        self.writer = SummaryWriter(f"{runs_dir}/{run_name}", flush_secs=flush_secs)
         self.run_name = run_name
         self.log_hparams = log_hparams
         logging.getLogger('stick').info(

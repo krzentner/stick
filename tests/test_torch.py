@@ -7,7 +7,7 @@ import stick.torch
 
 def test_summarize_tensor(tmp_path):
     run_name = "test_summarize_tensor"
-    output = CSVOutputEngine(log_dir=tmp_path, run_name=run_name)
+    output = CSVOutputEngine(runs_dir=tmp_path, run_name=run_name)
     output.log_row_inner(
         stick.Row(
             table_name="test_table1",

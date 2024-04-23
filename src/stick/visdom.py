@@ -1,7 +1,6 @@
 import numpy as np
 import stick
 import argparse
-import visdom
 from pathlib import Path
 
 X_RES = 500
@@ -9,14 +8,16 @@ X_RES = 500
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("log_dir", type=str)
+    parser.add_argument("runs_dir", type=str)
     return parser.parse_args()
 
 
 def main(args):
+    import visdom
+
     vis = visdom.Visdom()
-    log_dir = Path(args.log_dir)
-    log_data = stick.load_log_file(log_dir / "stick.ndjson")
+    runs_dir = Path(args.runs_dir)
+    log_data = stick.load_log_file(runs_dir / "stick.ndjson")
     print([k for k in log_data.keys() if k.startswith("$step")])
     for k, v in log_data.items():
         if not isinstance(v[0], str) and not k.startswith("$"):

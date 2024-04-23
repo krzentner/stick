@@ -3,7 +3,7 @@ import sys
 import inspect
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from typing import Any, Union, Optional
+from typing import Any, Callable, Union, Optional
 import functools
 import datetime
 import logging
@@ -13,15 +13,157 @@ import stick
 from stick.summarize import summarize, Summary, ScalarTypes
 from stick._utils import warn_internal
 
-INIT_CALLED = False
 
-# Log levels
+def log_row(
+    table: Optional[Union[str, dict, "Row"]] = None,
+    row: Optional[Union[dict, "Row"]] = None,
+    step: Optional[int] = None,
+    level: Optional[Union[int, "NamedLevel", "LogLevels"]] = None,
+):
+    """Primary logging entrypoint.
+
+    Shorthand for calling `stick.get_logger()`.`.log_row(row)`.
+    Will deduce any non-provided arguments.
+
+    If a Row object is provided, it contains all required fields and will be
+    passed to log_row, with arguments overriding the row fields if provided.
+
+    If the first argument is a str, it becomes the table name.
+    If the first argument is a dict, the table name is derived from the calling
+    file and line number.
+
+    If the row is not provided, locals from the calling function will be
+    logged, and the log_level will be set to TRACE (log level 5).
+    In other cases, level defaults to INFO (log level 10), which is also the
+    default value for most output engines.
+
+    Step determines the "X axis" of the logged data. If not provided it will
+    automatically be incremented every call with the same table.
+
+    If stick.init() or stick.init_extra() has not been called
+    before this function, stick.init() will be called with no
+    arguments
+
+    Examples:
+
+    ```
+    # Will log all local variables at log level TRACE
+    log_row()
+
+    # Will log all local variables at log level TRACE to table called 'grad_step'
+    log_row('grad_step')
+
+    # Will log into table based on current file and line number at log level INFO
+    log_row({'x': x})
+    ```
+    """
+
+    if level is None:
+        level = INFO
+    level = int(level)
+    logger = get_logger()
+
+    # Most of this function is magic to figure out how to produce a Row object
+    # based on minimal arguments.
+
+    # Special case only a row-like passed in as the first argument
+    # e.g. log({'x': x}) or log(Row('grad_step', {'x': x}))
+    if isinstance(table, (dict, Row)) and row is None and step is None:
+        row = table
+        table = None
+
+    # Check all the types
+    if table is not None:
+        assert isinstance(table, str)
+    if row is not None and not isinstance(row, (dict, Row)):
+        raise ValueError(
+            f"Unsupported row type {type(row)}. "
+            "Use a dictionary or inherit from stick.Row."
+        )
+    if step is not None:
+        assert isinstance(step, int)
+
+    # Check what we have
+    if isinstance(row, Row):
+        if level is not None:
+            row = replace(row, log_level=level)
+        # We have a row, so we won't need to guess any info
+        # Arguments might still override parts of the Row object
+        # e.g. log(Row('grad_step', {'x': x}), table='grad_step2')
+        # e.g. log(Row('grad_step', {'x': x}), step=0)
+        if table is None and step is None:
+            # Case 1: We have a row, just log it
+            logger.log_row(row=row)
+        elif isinstance(table, str) and step is None:
+            # Case 2: User provided the table and not a step, recompute the step
+            step = logger.get_default_step(table)
+            logger.log_row(replace(row, table_name=table, step=step))
+        elif isinstance(table, str) and isinstance(step, int):
+            # Case 3: User provided the table and step
+            logger.log_row(replace(row, table_name=table, step=step))
+    elif isinstance(table, str) and isinstance(row, dict):
+        # No inspecting required, just need to figure out the step
+        # e.g. log('grad_step', {'x': x})
+        if step is None:
+            step = logger.get_default_step(table)
+        logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
+    else:
+        # We do not have a Row, row is either a dict or None
+        # We need to figure out either our table name or row contents using
+        # inspect.
+        # e.g. log({'x': x}) or log() or log(table='x')
+        stack = inspect.stack()
+        frame_info = stack[1]
+        if table is None:
+            table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
+        if step is None:
+            step = logger.get_default_step(table)
+        if row is None:
+            row = frame_info.frame.f_locals
+        logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
+
+
+def load_log_file(
+    filename: str, keys: Optional[list[str]] = None
+) -> dict[str, list[ScalarTypes]]:
+    """Load a log file based on its file extension.
+
+    If keys are provided, only those keys will be loaded.
+
+    Returns a dictionary of keys to the scalar values of those keys.
+    The "$step" key contains the step values provided to log_row().
+    """
+    # Import the json output engine, since it has no external deps
+    import stick.ndjson_output
+    import stick.csv_output
+
+    _, ext = os.path.splitext(filename)
+    if ext in LOAD_FILETYPES:
+        return LOAD_FILETYPES[ext](filename, keys)
+    else:
+        raise ValueError(
+            f"Unknown filetype {ext}. Perhaps you need to load "
+            "a stick backend or use one of the well known log "
+            "types (.ndjson or .csv)"
+        )
+
+LOAD_FILETYPES: dict[str, Callable[[str, Optional[list[str]]], dict[str, list[ScalarTypes]]]] = {}
+"""Functions for loading different filetypes.
+
+Maps from extension (with a leading ".") to a function with the same API as load_log_file().
+"""
+
+_INIT_CALLED = False
 
 LOG_LEVELS = {}
+"""Contains all log levels created with NamedLevel.register."""
 
 @dataclass(eq=False, order=False, frozen=True)
 @functools.total_ordering
 class NamedLevel:
+    """A way of naming a log level without adding it to the
+    LogLevels enum.
+    """
     name: str
     val: int
 
@@ -54,6 +196,8 @@ class NamedLevel:
 
 @functools.total_ordering
 class LogLevels(enum.Enum):
+    """An enum of named log levels."""
+
     # Used for extremely noisy logging (maybe still useful for debugging)
     TRACE = NamedLevel.register("TRACE", 5)
     # Used for important results (not an error, but less noisy than INFO)
@@ -82,86 +226,62 @@ ERROR: LogLevels = LogLevels.ERROR
 CRITICAL: LogLevels = LogLevels.CRITICAL
 
 
-def default_run_name():
-    main_file = getattr(sys.modules.get("__main__"), "__file__", "interactive")
-    file_trail = os.path.splitext(os.path.basename(main_file))[0]
-    now = datetime.datetime.now().isoformat()
-    return f"{file_trail}_{now}"
-
-
-def setup_py_logging(run_dir, stderr_log_level=WARNING):
-    os.makedirs(run_dir, exist_ok=True)
-    FORMAT = "%(asctime)s %(name)s [%(levelname)-8.8s]: %(message)s"
-    rootLogger = logging.getLogger()
-    rootLogger.setLevel(0)
-    formatter = logging.Formatter(FORMAT, "%Y-%m-%d %H:%M:%S")
-
-    stream_handler = logging.StreamHandler(sys.stderr)
-    stream_handler.setLevel(int(stderr_log_level))
-    stream_handler.setFormatter(formatter)
-
-    file_handler = logging.FileHandler(filename=os.path.join(run_dir, "debug.log"))
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(int(TRACE))
-
-    rootLogger.addHandler(file_handler)
-    rootLogger.addHandler(stream_handler)
-
-    warnings_logger = logging.getLogger("py.warnings")
-    warnings_logger.addHandler(stream_handler)
-    warnings_logger.addHandler(file_handler)
-
-
-def init(log_dir="runs", run_name=None, stderr_log_level=WARNING, tb_log_level=INFO, tb_log_hparams=False) -> str:
-    """Initializes a logger in {log_dir}/{run_name} with default backends.
+def init(runs_dir="runs", run_name=None, stderr_log_level=WARNING, tb_log_level=INFO, tb_log_hparams=False) -> str:
+    """Initializes a logger in {runs_dir}/{run_name} with default backends.
 
     Run name will default to the main file and current time in ISO 8601 format.
     """
+    global _LOGGER
     if run_name is None:
-        run_name = default_run_name()
+        run_name = _default_run_name()
         if os.path.exists(run_name):
             raise ValueError(
                 "Could not create a unique default run name. "
                 "Most likely two runs began at the same time."
             )
 
-    run_dir = os.path.abspath(os.path.join(log_dir, run_name))
-    setup_py_logging(run_dir, stderr_log_level)
+    run_dir = os.path.abspath(os.path.join(runs_dir, run_name))
+    _setup_py_logging(run_dir, stderr_log_level)
 
-    global INIT_CALLED
-    if INIT_CALLED:
+    global _INIT_CALLED
+    if _INIT_CALLED:
         warn_internal(
             "stick.init() already called in this process. Most "
             "likely stick.log() was called before stick.init()."
         )
         return run_dir
-    INIT_CALLED = True
+    _INIT_CALLED = True
 
-    if LOGGER_STACK:
+    if _LOGGER is not None:
         warn_internal("logger was already present before stick.init() was called")
     from stick.ndjson_output import NDJsonOutputEngine
     from stick.csv_output import CSVOutputEngine
     from stick.pprint_output import PPrintOutputEngine
     from stick.tb_output import TensorBoardOutput
 
-    logger = Logger(log_dir=log_dir, run_name=run_name)
-    logger.add_output(NDJsonOutputEngine(f"{log_dir}/{run_name}/stick.ndjson"))
-    logger.add_output(CSVOutputEngine(log_dir, run_name))
+    logger = Logger(runs_dir=runs_dir, run_name=run_name)
+    logger.add_output(NDJsonOutputEngine(f"{runs_dir}/{run_name}/stick.ndjson"))
+    logger.add_output(CSVOutputEngine(runs_dir, run_name))
     try:
-        logger.add_output(TensorBoardOutput(log_dir, run_name, log_level=tb_log_level, log_hparams=tb_log_hparams))
+        logger.add_output(TensorBoardOutput(runs_dir, run_name, log_level=tb_log_level, log_hparams=tb_log_hparams))
     except ImportError:
         warn_internal("tensorboard API not installed")
-    logger.add_output(PPrintOutputEngine(f"{log_dir}/{run_name}/stick.log"))
+    logger.add_output(PPrintOutputEngine(f"{runs_dir}/{run_name}/stick.log"))
 
-    LOGGER_STACK.append(logger)
+    if "torch" in sys.modules:
+        import stick.torch
+    if "numpy" in sys.modules:
+        import stick.np
+
+    _LOGGER = logger
     return run_dir
 
 
-INIT_EXTRA_CALLED = False
+_INIT_EXTRA_CALLED = False
 
 
 def init_extra(
-    log_dir="runs",
+    runs_dir="runs",
     run_name=None,
     config=None,
     wandb_kwargs=None,
@@ -172,13 +292,20 @@ def init_extra(
     tb_log_level=INFO,
     tb_log_hparams=False,
 ) -> str:
-    run_dir = init(log_dir, run_name, stderr_log_level, tb_log_level, tb_log_hparams)
+    """Initializes a logger in {runs_dir}/{run_name} with default backends.
+
+    Run name will default to the main file and current time in ISO 8601 format.
+
+    Initializes stick logging, including all optional
+    features.
+    """
+    run_dir = init(runs_dir, run_name, stderr_log_level, tb_log_level, tb_log_hparams)
     logging.getLogger('stick').log(level=int(RESULTS),
                                    msg=f"Logging to: {run_dir}")
-    global INIT_EXTRA_CALLED
-    if INIT_EXTRA_CALLED:
+    global _INIT_EXTRA_CALLED
+    if _INIT_EXTRA_CALLED:
         return run_dir
-    INIT_EXTRA_CALLED = True
+    _INIT_EXTRA_CALLED = True
 
     if config is None:
         config = {}
@@ -232,7 +359,43 @@ def init_extra(
     return run_dir
 
 
+def _default_run_name():
+    main_file = getattr(sys.modules.get("__main__"), "__file__", "interactive")
+    file_trail = os.path.splitext(os.path.basename(main_file))[0]
+    now = datetime.datetime.now().isoformat()
+    return f"{file_trail}_{now}"
+
+
+def _setup_py_logging(run_dir, stderr_log_level=WARNING):
+    os.makedirs(run_dir, exist_ok=True)
+    FORMAT = "%(asctime)s %(name)s [%(levelname)-8.8s]: %(message)s"
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(0)
+    formatter = logging.Formatter(FORMAT, "%Y-%m-%d %H:%M:%S")
+
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setLevel(int(stderr_log_level))
+    stream_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(filename=os.path.join(run_dir, "debug.log"))
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(int(TRACE))
+
+    rootLogger.addHandler(file_handler)
+    rootLogger.addHandler(stream_handler)
+
+    warnings_logger = logging.getLogger("py.warnings")
+    warnings_logger.addHandler(stream_handler)
+    warnings_logger.addHandler(file_handler)
+
+
 def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
+    """Seed all common numerical libraries (random, numpy, torch,
+    and tensorflow).
+
+    This function will be called by `init_extra()` if a seed is
+    present in the provided config.
+    """
     import random
 
     random.seed(seed)
@@ -273,18 +436,31 @@ def seed_all_imported_modules(seed: int, make_deterministic: bool = True):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-LOGGER_STACK = []
+_LOGGER = None
+# Should we even use this? The original idea was to have a stack
+# for pushing hierarchical context to, as used in dowel.
+# However, I've mostly been using stick by recursively passing
+# local variable dictionaries up the stack.
+# Theoretically we could add an API for building up a row across
+# multiple levels of a call stack, but this would be within one
+# logger.
 
 
-def get_logger():
-    if "torch" in sys.modules:
-        import stick.torch
-    if not LOGGER_STACK:
+def get_logger() -> "Logger":
+    """Returns the global logger, calling stick.init() if
+    necessary.
+    """
+    if _LOGGER is None:
         init()
-    return LOGGER_STACK[-1]
+    assert _LOGGER is not None
+    return _LOGGER
 
 
 def add_output(output_engine):
+    """Adds an output to the global logger, calling stick.init() if
+    necessary.
+    """
+
     get_logger().add_output(output_engine)
 
 
@@ -298,7 +474,7 @@ class Row:
 
     # If someone is manually creating a Row, probably default to INFO (the
     # default logging level)
-    log_level: int = INFO
+    log_level: int = int(INFO)
 
     def as_summary(self) -> Summary:
         summarized = getattr(self, 'summarized', None)
@@ -311,8 +487,8 @@ class Row:
 
 
 class Logger:
-    def __init__(self, log_dir, run_name):
-        self.log_dir = log_dir
+    def __init__(self, runs_dir, run_name):
+        self.runs_dir = runs_dir
         self.run_name = run_name
         self.fileloc_to_tables: dict[tuple[str, int], str] = {}
         self.tables_to_fileloc: dict[str, tuple[str, int]] = {}
@@ -350,9 +526,14 @@ class Logger:
         self.table_to_default_step[table] += 1
         return step
 
-    def log_row(self, row):
+    def log_row(self, row: Row) -> bool:
+        logged_anywhere = False
         for output in self.all_output_engines:
-            output.log_row(row)
+            logged_anywhere |= output.log_row(row)
+        if not logged_anywhere:
+            warn_internal(
+                f"Log to table {row.table_name!r} was too low level for any logger output.")
+        return logged_anywhere
 
     def close(self):
         assert not self._closed
@@ -360,201 +541,50 @@ class Logger:
             output.close()
         self._closed = True
 
-    def __enter__(self):
-        LOGGER_STACK.append(self)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        assert LOGGER_STACK[-1] is self
-        LOGGER_STACK.pop()
-
-    def add_output(self, output):
+    def add_output(self, output: "OutputEngine"):
         self._output_engines[type(output).__name__].append(output)
 
 
 class OutputEngine:
+    """Base class of all output engines.
+
+    You should also apply the @declare_output_engine decorator to
+    any subclasses you create.
+    """
+
     def __init__(self, log_level):
         self.log_level = log_level
 
     def log_row(self, row: Row):
-        if row.log_level >= self.log_level:
+        """External method to call to log a row."""
+        if int(row.log_level) >= int(self.log_level):
             self.log_row_inner(row)
+            return True
+        else:
+            return False
 
     def log_row_inner(self, row: Row):
-        pass
+        """Method to override for implementing logging."""
+        del row
+        raise NotImplementedError()
 
     def close(self):
+        """Cleanup any necessary resources.
+        Unforunately not gauranteed to be called if python crashes.
+        """
         pass
 
 
-OUTPUT_ENGINES = {}
-LOAD_FILETYPES = {}
+OUTPUT_ENGINES: dict[str, type[OutputEngine]] = {}
+"""Output engine classes that have been declared using
+declare_output_engine.
+"""
 
 
-def declare_output_engine(output_engine_type):
-    """This decorator basically just serves as notice that the output's type
-    name is part of its interface."""
+def declare_output_engine(output_engine_type: type):
+    """This decorator basically just serves as notice that the
+    output's type name is part of its interface.
+    """
     assert issubclass(output_engine_type, OutputEngine)
     OUTPUT_ENGINES[output_engine_type.__name__] = output_engine_type
     return output_engine_type
-
-
-def load_log_file(
-    filename: str, keys: Optional[list[str]] = None
-) -> dict[str, list[ScalarTypes]]:
-    # Import the json output engine, since it has no external deps
-    import stick.ndjson_output
-
-    _, ext = os.path.splitext(filename)
-    if ext in LOAD_FILETYPES:
-        return LOAD_FILETYPES[ext](filename, keys)
-    else:
-        raise ValueError(
-            f"Unknown filetype {ext}. Perhaps you need to load "
-            "a stick backend or use one of the well known log "
-            "types (.ndjson or .csv)"
-        )
-
-
-def log(
-    table: Optional[Union[str, dict, Row]] = None,
-    row: Optional[Union[dict, Row]] = None,
-    step: Optional[int] = None,
-    level: Optional[Union[int, NamedLevel]] = None,
-):
-    """Primary logging entrypoint.
-
-    Shorthand for constructing a row and calling get_logger().log_row(row).
-    Will deduce any non-provided arguments.
-
-    If a Row object is provided, it contains all required fields and will be
-    passed to log_row, with arguments overriding the row fields if provided.
-
-    If the first argument is a str, it becomes the table name.
-    If the first argument is a dict, the table name is derived from the calling
-    file and line number.
-
-    If the row is not provided, locals from the calling function will be
-    logged, and the log_level will be set to TRACE (log level 5).
-    In other cases, level defaults to INFO (log level 10), which is also the
-    default value for most output engines.
-
-    Step determines the "X axis" of the logged data. If not provided it will
-    automatically be incremented every call with the same table.
-
-    Examples:
-
-    # Will log all local variables at log level TRACE
-    log()
-
-    # Will log all local variables at log level TRACE to table called 'grad_step'
-    log('grad_step')
-
-    # Will log into table based on current file and line number at log level INFO
-    log({'x': x})
-    """
-
-    logger = get_logger()
-
-    # Most of this function is magic to figure out how to produce a Row object
-    # based on minimal arguments.
-
-    # Special case only a row-like passed in as the first argument
-    # e.g. log({'x': x}) or log(Row('grad_step', {'x': x}))
-    if isinstance(table, (dict, Row)) and row is None and step is None:
-        row = table
-        table = None
-
-    # Check all the types
-    if table is not None:
-        assert isinstance(table, str)
-    if row is not None and not isinstance(row, (dict, Row)):
-        raise ValueError(
-            f"Unsupported row type {type(row)}. "
-            "Use a dictionary or inherit from stick.Row."
-        )
-    if step is not None:
-        assert isinstance(step, int)
-
-    # Check what we have
-    if isinstance(row, Row):
-        if level is not None:
-            row = replace(row, log_level=level)
-        # We have a row, so we won't need to guess any info
-        # Arguments might still override parts of the Row object
-        # e.g. log(Row('grad_step', {'x': x}), table='grad_step2')
-        # e.g. log(Row('grad_step', {'x': x}), step=0)
-        if table is None and step is None:
-            # Case 1: We have a row, just log it
-            logger.log_row(row=row)
-        elif isinstance(table, str) and step is None:
-            # Case 2: User provided the table and not a step, recompute the step
-            step = logger.get_default_step(table)
-            logger.log_row(replace(row, table_name=table, step=step))
-        elif isinstance(table, str) and isinstance(step, int):
-            # Case 3: User provided the table and step
-            logger.log_row(replace(row, table_name=table, step=step))
-    elif isinstance(table, str) and isinstance(row, dict):
-        # No inspecting required, just need to figure out the step
-        # e.g. log('grad_step', {'x': x})
-        if step is None:
-            step = logger.get_default_step(table)
-        if level is None:
-            level = INFO
-        logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
-    else:
-        # We do not have a Row, row is either a dict or None
-        # We need to figure out either our table name or row contents using
-        # inspect.
-        # e.g. log({'x': x}) or log() or log(table='x')
-        stack = inspect.stack()
-        frame_info = stack[1]
-        if table is None:
-            table = logger.get_unique_table(frame_info.filename, frame_info.lineno)
-        if step is None:
-            step = logger.get_default_step(table)
-        if row is None:
-            row = frame_info.frame.f_locals
-            if level is None:
-                level = INFO
-        if level is None:
-            level = INFO
-        logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
-
-
-def test_log_pprint(tmp_path):
-    from stick.pprint_output import PPrintOutputEngine
-    import io
-
-    hi = "HI ^_^"
-    f = io.StringIO()
-    with Logger(log_dir=tmp_path, run_name="test_log_pprint") as logger:
-        logger.add_output(PPrintOutputEngine(f))
-        log()
-        content1 = f.getvalue()
-        assert hi in content1
-        log()
-        content2 = f.getvalue()
-        assert hi in content2
-        assert content2.startswith(content1)
-        assert len(content2) > len(content1)
-        print(content2)
-
-
-def test_log_json(tmp_path):
-    from stick.ndjson_output import NDJsonOutputEngine
-    import io
-
-    hi = "HI ^_^"
-    f = io.StringIO()
-    with Logger(log_dir=tmp_path, run_name="test_log_json") as logger:
-        logger.add_output(NDJsonOutputEngine(f))
-        log()
-        content1 = f.getvalue()
-        assert hi in content1
-        log()
-        content2 = f.getvalue()
-        assert hi in content2
-        assert content2.startswith(content1)
-        assert len(content2) > len(content1)
-        print(content2)

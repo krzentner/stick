@@ -5,8 +5,9 @@ import stick
 from stick.csv_output import CSVOutputEngine
 
 LOG_PATH = "runs/stick_tests/debug.log"
-os.remove(LOG_PATH)
-stick.setup_py_logging("runs/stick_tests")
+if os.path.exists(LOG_PATH):
+    os.remove(LOG_PATH)
+stick._setup_py_logging("runs/stick_tests")
 
 
 def _read_file(f_name):
@@ -16,7 +17,7 @@ def _read_file(f_name):
 
 def test_write(tmp_path):
     run_name = "test_run"
-    output = CSVOutputEngine(log_dir=tmp_path, run_name=run_name)
+    output = CSVOutputEngine(runs_dir=tmp_path, run_name=run_name)
     output.log_row_inner(
         stick.Row(
             table_name="test_table1",
@@ -61,7 +62,7 @@ def test_read(tmp_path):
 
 def test_write_inconsistent_keys(tmp_path):
     run_name = "test_run"
-    output = CSVOutputEngine(log_dir=tmp_path, run_name=run_name)
+    output = CSVOutputEngine(runs_dir=tmp_path, run_name=run_name)
     output.log_row_inner(
         stick.Row(
             table_name="test_table1",

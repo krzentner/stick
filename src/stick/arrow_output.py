@@ -18,7 +18,7 @@ DEFAULT_FILETYPES = [".csv", ".parquet"]
 class ArrowOutputEngine(stick.OutputEngine):
     def __init__(
         self,
-        log_dir: stick._utils.FileIsh,
+        runs_dir: stick._utils.FileIsh,
         run_name: str,
         filetypes=DEFAULT_FILETYPES,
         log_level=stick.TRACE,
@@ -28,12 +28,12 @@ class ArrowOutputEngine(stick.OutputEngine):
         super().__init__(log_level=log_level)
 
         # Convert non-uri paths to absolute paths
-        if not re.match(r"^[a-z0-9]+://", log_dir):
-            log_dir = os.path.abspath(log_dir)
+        if not re.match(r"^[a-z0-9]+://", runs_dir):
+            runs_dir = os.path.abspath(runs_dir)
 
-        self.base_uri = log_dir
+        self.base_uri = runs_dir
 
-        self.fs, self.base_path = pa.fs.FileSystem.from_uri(log_dir)
+        self.fs, self.base_path = pa.fs.FileSystem.from_uri(runs_dir)
         self.fs.create_dir(self.base_path)
         self.filetypes = filetypes
         self.run_name = run_name
