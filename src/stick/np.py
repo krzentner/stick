@@ -9,7 +9,7 @@ except ImportError as ex:
     warn_internal(ex)
 
 
-@declare_summarizer("numpy.ndarray")
+@declare_summarizer("numpy.ndarray", monkey_patch=False)
 def summarize_array(array, key, dst):
     if array.flatten().shape == (1,):
         dst[key] = array.flatten()[0]

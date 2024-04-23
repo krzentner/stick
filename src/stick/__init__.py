@@ -127,10 +127,12 @@ def log_row(
             row = frame_info.frame.f_locals
         logger.log_row(Row(raw=row, table_name=table, step=step, log_level=level))
 
+
 # Keep these this list and type synchronized
 ScalarTypeTuple = (type(None), str, float, int, bool)
 ScalarTypes = Union[type(None), str, float, int, bool]
 Summary = dict[str, Union[None, str, float, int, bool]]
+
 
 def load_log_file(
     filename: str, keys: Optional[list[str]] = None
@@ -278,7 +280,8 @@ def init(
     if _INIT_CALLED:
         warn_internal(
             "stick.init() already called in this process. Most "
-            "likely stick.log() was called before stick.init()."
+            "likely stick.log_row() was called before "
+            "stick.init()."
         )
         return run_dir
     _INIT_CALLED = True
@@ -301,7 +304,10 @@ def init(
         )
     except ImportError:
         warn_internal("tensorboard API not installed")
-    logger.add_output(PPrintOutputEngine(f"{runs_dir}/{run_name}/stick.log"))
+
+    logger.add_output(
+        PPrintOutputEngine(file=f"{runs_dir}/{run_name}/stick_pprint.log")
+    )
 
     if "torch" in sys.modules:
         # Imported for side effects
@@ -503,6 +509,7 @@ def add_output(output_engine):
     """
 
     get_logger().add_output(output_engine)
+
 
 SUMMARIZERS: dict[str, Callable[[Any, str, Summary], None]] = {}
 """Registered summarizers.

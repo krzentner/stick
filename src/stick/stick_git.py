@@ -4,10 +4,13 @@ import os
 from typing import Optional, Any
 import warnings
 from stat import S_ISREG
+import logging
 
 import git
 
 EIGHT_MEBIBYTES = 8 * 2**20
+
+_LOGGER = logging.getLogger("stick")
 
 
 def checkpoint_repo(
@@ -52,10 +55,13 @@ def checkpoint_repo(
             skip_hooks=True,
         )
         branch.reference = checkpoint_commit
-        print(
-            f"Saved code to git commit f{checkpoint_commit.hexsha} on "
+        msg = (
+            f"Saved code to git commit "
+            f"{checkpoint_commit.hexsha} on "
             f"branch {checkpoint_branch}"
         )
+        _LOGGER.debug(msg)
+        print(msg)
         git_hash = checkpoint_commit.hexsha
         subprocess.run(
             (

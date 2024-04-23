@@ -29,6 +29,7 @@ class PPrintOutputEngine(OutputEngine):
         else:
             msg = row.raw
         pprint(msg, stream=self.fm.file)
+        self.fm.file.flush()
 
     def close(self):
         self.fm.close()

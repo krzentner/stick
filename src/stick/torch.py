@@ -38,4 +38,4 @@ def summarize_module(module, key, dst):
 def summarize_optimizer(optimizer, key, dst):
     state = optimizer.state_dict()
     del state["param_groups"]
-    flatten(state, key, dst)
+    summarize(state, key, dst)

@@ -31,7 +31,7 @@ class CSVOutputEngine(stick.OutputEngine):
         msg = row.as_summary()
         msg.update(
             {
-                "$localtime": time.localtime(),
+                "$localtime": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
                 "$utc_timestamp": datetime.datetime.utcnow().timestamp(),
                 "$step": row.step,
                 "$level": row.log_level,
