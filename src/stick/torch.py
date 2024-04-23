@@ -1,6 +1,6 @@
 """Enhances stick.flatten to handle common torch types."""
-from stick.flat_utils import flatten, declare_processor
-from stick.utils import warn_internal
+from stick.summarize import summarize, declare_summarizer
+from stick._utils import warn_internal
 
 try:
     import torch
@@ -9,8 +9,8 @@ except ImportError as ex:
     warn_internal(ex)
 
 
-@declare_processor("torch.Tensor")
-def process_tensor(tensor, key, dst):
+@declare_summarizer("torch.Tensor")
+def summarize_tensor(tensor, key, dst):
     if tensor.flatten().shape == (1,):
         dst[key] = tensor.flatten().item()
     else:
@@ -26,16 +26,16 @@ def process_tensor(tensor, key, dst):
             pass
 
 
-@declare_processor("torch.nn.Module")
-def process_module(module, key, dst):
+@declare_summarizer("torch.nn.Module")
+def summarize_module(module, key, dst):
     for name, param in module.named_parameters():
-        flatten(param, f"{key}.{name}", dst)
+        summarize(param, f"{key}.{name}", dst)
         if param.grad is not None:
-            flatten(param.grad, f"{key}.{name}.grad", dst)
+            summarize(param.grad, f"{key}.{name}.grad", dst)
 
 
-@declare_processor("torch.optim.Optimizer")
-def process_optimizer(optimizer, key, dst):
+@declare_summarizer("torch.optim.Optimizer")
+def summarize_optimizer(optimizer, key, dst):
     state = optimizer.state_dict()
     del state['param_groups']
     flatten(state, key, dst)

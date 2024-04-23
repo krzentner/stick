@@ -3,35 +3,35 @@ import sys
 import fnmatch
 from typing import Any, Union
 
-from stick.utils import warn_internal
+from stick._utils import warn_internal
 
-STICK_PREPROCESSOR = "stick_preprocess"
+STICK_SUMMARIZE = "stick_summarize"
 
 SKIP = object()
 
-PROCESSORS = {}
+SUMMARIZERS = {}
 
 MAX_SEQ_LEN = 8
 
 
-def declare_processor(type_description: Union[str, type], monkey_patch: bool = True):
+def declare_summarizer(type_description: Union[str, type], monkey_patch: bool = True):
     if isinstance(type_description, str):
         type_str = type_description
     else:
         type_str = type_string(type_description)
 
     def decorator(processor):
-        assert type_str not in PROCESSORS
-        PROCESSORS[type_str] = processor
+        assert type_str not in SUMMARIZERS
+        SUMMARIZERS[type_str] = processor
 
         if monkey_patch:
-            # Try to monkey-patch STICK_PREPROCESSOR method onto type
+            # Try to monkey-patch STICK_SUMMARIZE method onto type
             parts = type_str.split(".")
             try:
                 obj = sys.modules[parts[0]]
                 for p in parts[1:]:
                     obj = getattr(obj, p, None)
-                setattr(obj, STICK_PREPROCESSOR, processor)
+                setattr(obj, STICK_SUMMARIZE, processor)
             except (KeyError, AttributeError, TypeError) as ex:
                 warn_internal(
                     f"Coudld not money-patch processor to type {type_str!r}: {ex}"
@@ -60,11 +60,11 @@ def is_instance_str(obj, type_names):
 
 # Keep these this list and type synchronized
 ScalarTypes = (type(None), str, float, int, bool)
-FlatDict = dict[str, Union[None, str, float, int, bool]]
+Summary = dict[str, Union[None, str, float, int, bool]]
 
 
-def flatten(src: Any, prefix: str, dst: FlatDict):
-    """Lossfully flatten a dictionary."""
+def summarize(src: Any, prefix: str, dst: Summary):
+    """Lossfully summarize a value."""
     if prefix == "_":
         return
     if isinstance(src, ScalarTypes):
@@ -91,16 +91,16 @@ def flatten(src: Any, prefix: str, dst: FlatDict):
             except ValueError:
                 pass
             else:
-                flatten(v, flat_k, dst)
+                summarize(v, flat_k, dst)
     elif isinstance(src, (list, tuple)):
         for i, v in enumerate(src):
             flat_k = f"{prefix}[{i}]"
-            flatten(v, prefix, dst)
+            summarize(v, prefix, dst)
     else:
-        processor = PROCESSORS.get(type_string(src), None)
+        processor = SUMMARIZERS.get(type_string(src), None)
         if processor is not None:
             processor(src, prefix, dst)
         else:
-            processor = getattr(src, STICK_PREPROCESSOR, None)
+            processor = getattr(src, STICK_SUMMARIZE, None)
             if processor is not None:
                 processor(prefix, dst)

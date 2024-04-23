@@ -6,15 +6,15 @@ import csv
 import time
 
 import stick
-from stick.flat_utils import ScalarTypes
-from stick.utils import FileManager, warn_internal
+from stick.summarize import ScalarTypes
+from stick._utils import FileManager, warn_internal
 
 
 @stick.declare_output_engine
 class CSVOutputEngine(stick.OutputEngine):
     def __init__(
         self,
-        log_dir: stick.utils.FileIsh,
+        log_dir: stick._utils.FileIsh,
         run_name: str,
         log_level=stick.TRACE,
     ):
@@ -24,7 +24,7 @@ class CSVOutputEngine(stick.OutputEngine):
         self.writers = {}
 
     def log_row_inner(self, row: stick.Row):
-        msg = row.as_flat_dict()
+        msg = row.as_summary()
         msg.update(
             {
                 "$localtime": time.localtime(),
@@ -109,7 +109,7 @@ def _try_convert(s: str) -> Union[str, float]:
 
 def load_csv_file(
     filename: str, keys: Optional[list[str]] = None
-) -> dict[str, list[stick.flat_utils.ScalarTypes]]:
+) -> dict[str, list[ScalarTypes]]:
     with open(filename) as f:
         reader = csv.DictReader(f)
         rows = list(reader)

@@ -32,7 +32,7 @@ pip install git+https://github.com/krzentner/stick.git@v0.1.0[recommended]
 Most numerical logging libraries expect you to log one key at a time.
 Stick instead expects you to log one "row" at a time, into a named "table". In the above example, the table is named "grad_step", and the row is all local variables.
 
-Stick will then go through all of the passed in local variables, and determine how to summarize them.
+Stick will then go through all values in the row, and determine how to summarize them.
 For example, it will summarize a pytorch neural network using the min, max, mean, and std of each parameter, as well as those values for the gradient of each parameter (if available).
 
 Once summarized, stick outputs that row to all stick backends that have a log level at least as sensitive as the provided level.
@@ -48,7 +48,7 @@ Requires optional dependencies:
   - tensorboard (will use torch.utils.tensorboard or tensorboardX or tf.summary)
   - parquet (requires pyarrow)
 
-## Row Preprocessing
+## Row Summarization
 
 Stick runs a preprocessing step on each provided row before logging it.
 This pre-process is typically *lossy*, and summarizes large input arrays into a few scalars.
@@ -56,15 +56,15 @@ This is necessary to be able to log all local variables, and is an unavoidable t
 If you want to be able to exactly recover a value passed to stick, format it to a `str` or `bytes` first, and use the csv, ndjson, or parquet backends.
 
 For built-in datatypes (dictionaries, lists, tuples), preprocessing runs recursively.
-For commonly used numerical libraries (numpy, pytorch), there are adapter modules to flatten common datatypes.
+For commonly used numerical libraries (numpy, pytorch), there are adapter modules to summarize common datatypes.
 
-If you want your type to be flattened, you can define a method `stick_preprocess`. Example:
+If you want your type to be flattened, you can define a method `stick_summarize`. Example:
 
 ```python
-from stick.flat_utils import flatten, ScalarTypes
+from stick.summarize import summarize, ScalarTypes
 
-    def stick_preprocess(self, prefix: str, dst: dict[str, ScalarTypes]):
-        flatten(self.subfield, f"{prefix}.subfield", dst)
+    def stick_summarize(self, prefix: str, dst: dict[str, ScalarTypes]):
+        summarize(self.subfield, f"{prefix}.subfield", dst)
         dst[f"{prefix}.y"] = self.y
         dst[f"{prefix}.x"] = self.x
 ```

@@ -18,7 +18,7 @@ DEFAULT_FILETYPES = [".csv", ".parquet"]
 class ArrowOutputEngine(stick.OutputEngine):
     def __init__(
         self,
-        log_dir: stick.utils.FileIsh,
+        log_dir: stick._utils.FileIsh,
         run_name: str,
         filetypes=DEFAULT_FILETYPES,
         log_level=stick.TRACE,
@@ -41,7 +41,7 @@ class ArrowOutputEngine(stick.OutputEngine):
         self.writers = {}
 
     def log_row_inner(self, row):
-        msg = row.as_flat_dict()
+        msg = row.as_summary()
         msg["$step"] = row.step
         msg["$utc_timestamp"] = datetime.datetime.utcnow().timestamp()
         msg["$level"] = int(row.log_level)
@@ -94,7 +94,7 @@ class ArrowOutputEngine(stick.OutputEngine):
 
 def load_parquet_file(
     filename: str, keys: Optional[list[str]]
-) -> dict[str, list[stick.flat_utils.ScalarTypes]]:
+) -> dict[str, list[stick.summarize.ScalarTypes]]:
     table = pa.parquet.read_table(filename, columns=keys)
     return table.to_pydict()
 
@@ -104,7 +104,7 @@ stick.LOAD_FILETYPES[".parquet"] = load_parquet_file
 
 def load_csv_file(
     filename: str, keys: Optional[list[str]]
-) -> dict[str, list[stick.flat_utils.ScalarTypes]]:
+) -> dict[str, list[stick.summarize.ScalarTypes]]:
     table = pa.csv.read_csv(
         filename, read_options=pa.csv.ReadOptions(column_names=keys)
     )

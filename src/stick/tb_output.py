@@ -1,7 +1,7 @@
 import logging
 
 from stick import OutputEngine, declare_output_engine, INFO
-from stick.utils import warn_internal
+from stick._utils import warn_internal
 
 SummaryWriter = None
 
@@ -41,7 +41,7 @@ class TensorBoardOutput(OutputEngine):
 
     def log_row_inner(self, row):
         if row.table_name == "hparams" and self.log_hparams:
-            flat_dict = row.as_flat_dict()
+            flat_dict = row.as_summary()
             hparams = {
                 k: v for (k, v) in flat_dict.items() if not k.startswith("metric")
             }
@@ -52,7 +52,7 @@ class TensorBoardOutput(OutputEngine):
             except TypeError:
                 self.writer.add_hparams(hparams, metrics, name="hparams")
         else:
-            for k, v in row.as_flat_dict().items():
+            for k, v in row.as_summary().items():
                 if v is not None and not isinstance(v, str):
                     try:
                         self.writer.add_scalar(f"{row.table_name}/{k}".replace(':', '_'),

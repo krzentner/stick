@@ -1,6 +1,6 @@
 """Enhances stick.flatten to handle numpy arrays."""
-from stick.flat_utils import flatten, declare_processor
-from stick.utils import warn_internal
+from stick.summarize import declare_summarizer
+from stick._utils import warn_internal
 
 try:
     import numpy as np
@@ -9,8 +9,8 @@ except ImportError as ex:
     warn_internal(ex)
 
 
-@declare_processor("numpy.ndarray")
-def process_tensor(array, key, dst):
+@declare_summarizer("numpy.ndarray")
+def summarize_tensor(array, key, dst):
     if array.flatten().shape == (1,):
         dst[key] = array.flatten()[0]
     else:

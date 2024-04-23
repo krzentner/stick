@@ -7,25 +7,25 @@ import datetime
 
 
 import stick
-from stick.utils import warn_internal
-from stick.flat_utils import ScalarTypes, is_instance_str
+from stick._utils import warn_internal
+from stick.summarize import ScalarTypes, is_instance_str
 
 
 @stick.declare_output_engine
 class NDJsonOutputEngine(stick.OutputEngine):
     def __init__(
         self,
-        file: stick.utils.FileIsh = None,
-        flatten: bool = True,
+        file: stick._utils.FileIsh = None,
+        summarize: bool = True,
         log_level=stick.TRACE,
     ):
         super().__init__(log_level=log_level)
-        self.fm = stick.utils.FileManager(file)
-        self.flatten = flatten
+        self.fm = stick._utils.FileManager(file)
+        self.summarize = summarize
 
     def log_row_inner(self, row):
-        if self.flatten:
-            msg = row.as_flat_dict()
+        if self.summarize:
+            msg = row.as_summary()
         else:
             msg = row.raw.copy()
         msg.update(
@@ -48,7 +48,7 @@ class NDJsonOutputEngine(stick.OutputEngine):
 class LogEncoder(json.JSONEncoder):
     """Encoder to be used as cls in json.dump.
 
-    Is used in NDJsonOutputEngine if flatten=False.
+    Is used in NDJsonOutputEngine if summarize=False.
 
     Args:
         args (object): Passed to super class.

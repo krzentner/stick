@@ -4,7 +4,6 @@ from typing import Union
 import os
 import sys
 import logging
-import warnings
 
 PathIsh = Union[str, bytes, Path]
 FileIsh = Union[None, PathIsh, TextIOWrapper]
@@ -50,11 +49,5 @@ class FileManager:
             self.file.close()
 
 
-class LoggerWarning(UserWarning):
-    def __init__(self, msg):
-        super().__init__(msg)
-
-
 def warn_internal(msg):
     logging.getLogger("stick").warning(msg)
-    # warnings.warn(LoggerWarning(msg))
