@@ -14,6 +14,7 @@ import datetime
 import logging
 import enum
 import pathlib
+import warnings
 
 import stick
 from stick._utils import warn_internal
@@ -129,7 +130,7 @@ def log_row(
 
 
 # Keep these this list and type synchronized
-ScalarTypeTuple = (type(None), str, float, int, bool)
+_ScalarTypeTuple = (type(None), str, float, int, bool)
 ScalarTypes = Union[type(None), str, float, int, bool]
 Summary = dict[str, Union[None, str, float, int, bool]]
 
@@ -176,8 +177,9 @@ LOG_LEVELS = {}
 @dataclass(eq=False, order=False, frozen=True)
 @functools.total_ordering
 class NamedLevel:
-    """A way of naming a log level without adding it to the
-    LogLevels enum.
+    """An extensible way of naming a log level.
+
+    You can use this to name your own log levels :)
     """
 
     name: str
@@ -309,11 +311,10 @@ def init(
         PPrintOutputEngine(file=f"{runs_dir}/{run_name}/stick_pprint.log")
     )
 
+    # Imported for side effects
     if "torch" in sys.modules:
-        # Imported for side effects
         import stick.torch
     if "numpy" in sys.modules:
-        # Imported for side effects
         import stick.np
 
     _LOGGER = logger
@@ -529,7 +530,10 @@ def declare_summarizer(type_description: Union[str, type], monkey_patch: bool = 
         raise ValueError("Need to pass type name to declare_summarizer")
 
     def decorator(processor):
-        assert type_str not in SUMMARIZERS
+        if type_str in SUMMARIZERS:
+            # Use warnings here instead of warn_internal since the
+            # logger has not been set up at import time.
+            warnings.warn(f"{type_str!r} already had a registered summarizer.")
         SUMMARIZERS[type_str] = processor
 
         if monkey_patch:
@@ -541,7 +545,7 @@ def declare_summarizer(type_description: Union[str, type], monkey_patch: bool = 
                     obj = getattr(obj, p, None)
                 setattr(obj, _STICK_SUMMARIZE, processor)
             except (KeyError, AttributeError, TypeError) as ex:
-                warn_internal(
+                warnings.warn(
                     f"Coudld not money-patch processor to type {type_str!r}: {ex}"
                 )
 
@@ -550,13 +554,13 @@ def declare_summarizer(type_description: Union[str, type], monkey_patch: bool = 
     return decorator
 
 
-def type_string(obj):
+def _type_string(obj):
     return f"{type(obj).__module__}.{type(obj).__name__}"
 
 
 def is_instance_str(obj, type_names):
     """An isinstance check that does not require importing the type's module."""
-    obj_type_str = type_string(obj)
+    obj_type_str = _type_string(obj)
     if isinstance(type_names, str):
         return fnmatch.fnmatch(obj_type_str, type_names)
     else:
@@ -570,7 +574,7 @@ def summarize(src: Any, prefix: str, dst: Summary):
     """Lossfully summarize a value."""
     if prefix == "_":
         return
-    if isinstance(src, ScalarTypeTuple):
+    if isinstance(src, _ScalarTypeTuple):
         key = prefix
         i = 1
         while key in dst:
@@ -600,13 +604,13 @@ def summarize(src: Any, prefix: str, dst: Summary):
             flat_k = f"{prefix}[{i}]"
             summarize(v, prefix, dst)
     else:
-        processor = SUMMARIZERS.get(type_string(src), None)
-        if processor is not None:
-            processor(src, prefix, dst)
+        summarizer = SUMMARIZERS.get(_type_string(src), None)
+        if summarizer is not None:
+            summarizer(src, prefix, dst)
         else:
-            processor = getattr(src, _STICK_SUMMARIZE, None)
-            if processor is not None:
-                processor(prefix, dst)
+            summarizer = getattr(src, _STICK_SUMMARIZE, None)
+            if summarizer is not None:
+                summarizer(prefix, dst)
 
 
 @dataclass
@@ -650,7 +654,7 @@ class Row:
 class Logger:
     """Main container of stick state.
 
-    Conains all instantiated OutputEngines, as well as stateful
+    Contains all instantiated OutputEngines, as well as stateful
     table default values (step, name of tables based on callsite).
     """
 
