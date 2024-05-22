@@ -1,3 +1,10 @@
+Because a package called "stick" already exists on pypi, I have renamed `stick` to `noko`. You can read me on the [github noko page](https://github.com/krzentner/noko), or run:
+
+```sh
+pip install "noko[recommended]"
+```
+
+
 # stick
 
 [\[api reference\]](https://krzentner.github.io/stick/)
